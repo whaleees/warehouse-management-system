@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { formatDate, formatIDR } from "@/lib/format";
+import { orderStatusColor, grStatusColor, OrderStatus } from "@/lib/status";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
+import { usePurchaseOrderDetail } from "./use-purchase-order-detail";
 import {
   ArrowLeft,
   Building2,
@@ -19,114 +24,13 @@ import {
   Plus,
 } from "lucide-react";
 
-type OrderStatus =
-  | "DRAFT"
-  | "PENDING"
-  | "PARTIALLY_RECEIVED"
-  | "RECEIVED"
-  | "CANCELLED";
-
-interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  uom: string;
-}
-
-interface PurchaseOrderItem {
-  id: string;
-  quantity: number;
-  unitPrice: string;
-  product: Product;
-  receiptLines?: Array<{
-    quantity: number;
-  }>;
-}
-
-interface GoodsReceipt {
-  id: string;
-  receiptNumber: string;
-  status: "PENDING" | "RECEIVED";
-  receivedAt: string;
-}
-
-interface Supplier {
-  id: string;
-  code: string;
-  name: string;
-}
-
-interface PurchaseOrder {
-  id: string;
-  orderNumber: string;
-  status: OrderStatus;
-  orderDate: string;
-  expectedDate?: string;
-  supplier: Supplier;
-  items: PurchaseOrderItem[];
-  goodsReceipts: GoodsReceipt[];
-}
-
-function statusBadgeColor(
-  status: OrderStatus
-): "default" | "success" | "warning" | "danger" {
-  switch (status) {
-    case "DRAFT":
-      return "default";
-    case "PENDING":
-      return "warning";
-    case "PARTIALLY_RECEIVED":
-      return "warning";
-    case "RECEIVED":
-      return "success";
-    case "CANCELLED":
-      return "danger";
-    default:
-      return "default";
-  }
-}
-
-function formatDate(d?: string | null) {
-  if (!d) return "-";
-  return new Date(d).toLocaleString();
-}
-
 export default function PurchaseOrderDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
 
-  const [po, setPo] = useState<PurchaseOrder | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { po, loading, totals, reload: loadPo } = usePurchaseOrderDetail(id);
   const [acting, setActing] = useState(false);
-
-  async function loadPo() {
-    try {
-      const data = await api(`/purchase-order/${id}`);
-      setPo(data);
-    } catch (err) {
-      console.error("Load PO failed:", err);
-      setPo(null);
-    }
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    loadPo();
-  }, [id]);
-
-  const totals = useMemo(() => {
-    if (!po) return { lineCount: 0, totalQty: 0, totalAmount: 0 };
-    const lineCount = po.items?.length ?? 0;
-    let totalQty = 0;
-    let totalAmount = 0;
-    po.items.forEach((it) => {
-      totalQty += it.quantity;
-      const price = Number(it.unitPrice ?? 0);
-      totalAmount += it.quantity * price;
-    });
-    return { lineCount, totalQty, totalAmount };
-  }, [po]);
 
   async function approvePo() {
     if (!po) return;
@@ -178,9 +82,7 @@ export default function PurchaseOrderDetailPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-sm text-[var(--text-muted)]">
-          Loading purchase order...
-        </p>
+        <LoadingState className="text-sm text-[var(--text-muted)]" message="Loading purchase order..." />
       </DashboardShell>
     );
   }
@@ -188,7 +90,7 @@ export default function PurchaseOrderDetailPage() {
   if (!po) {
     return (
       <DashboardShell>
-        <p className="text-sm text-red-400">Purchase Order not found.</p>
+        <EmptyState className="text-sm text-red-400" message="Purchase Order not found." />
       </DashboardShell>
     );
   }
@@ -216,7 +118,7 @@ export default function PurchaseOrderDetailPage() {
                 <h1 className="text-xl font-mono tracking-widest">
                   {po.orderNumber}
                 </h1>
-                <Badge color={statusBadgeColor(po.status)}>{po.status}</Badge>
+                <Badge color={orderStatusColor(po.status)}>{po.status}</Badge>
               </div>
               <p className="text-xs text-[var(--text-muted)] mt-1 font-mono tracking-wide">
                 Created on {formatDate(po.orderDate)}
@@ -328,10 +230,7 @@ export default function PurchaseOrderDetailPage() {
               <p>Total Qty: {totals.totalQty}</p>
               <p>
                 Est. Amount:{" "}
-                {totals.totalAmount.toLocaleString("id-ID", {
-                  style: "currency",
-                  currency: "IDR",
-                })}
+                {formatIDR(totals.totalAmount)}
               </p>
             </div>
           </Card>
@@ -525,18 +424,12 @@ export default function PurchaseOrderDetailPage() {
 
           {/* UNIT PRICE */}
           <td className="px-4 py-3 text-right">
-            {price.toLocaleString("id-ID", {
-              style: "currency",
-              currency: "IDR",
-            })}
+            {formatIDR(price)}
           </td>
 
           {/* LINE TOTAL */}
           <td className="px-4 py-3 text-right">
-            {lineTotal.toLocaleString("id-ID", {
-              style: "currency",
-              currency: "IDR",
-            })}
+            {formatIDR(lineTotal)}
           </td>
         </tr>
       );
@@ -590,11 +483,7 @@ export default function PurchaseOrderDetailPage() {
                         {formatDate(gr.receivedAt)}
                       </p>
                     </div>
-                    <Badge
-                      color={
-                        gr.status === "RECEIVED" ? "success" : "warning"
-                      }
-                    >
+                    <Badge color={grStatusColor(gr.status)}>
                       {gr.status}
                     </Badge>
                   </div>

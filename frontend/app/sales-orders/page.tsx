@@ -8,6 +8,8 @@ import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { formatDate } from "@/lib/format";
+import { salesOrderStatusColor } from "@/lib/status";
 import { Plus, ArrowRight, User2 } from "lucide-react";
 
 type SalesOrderStatus =
@@ -32,28 +34,6 @@ interface SalesOrder {
   shipments?: { id: string }[];
 }
 
-function statusBadgeColor(
-  status: SalesOrderStatus
-): "default" | "success" | "warning" | "danger" {
-  switch (status) {
-    case "DRAFT":
-      return "default";
-    case "PENDING":
-    case "PARTIALLY_SHIPPED":
-      return "warning";
-    case "SHIPPED":
-      return "success";
-    case "CANCELLED":
-      return "danger";
-    default:
-      return "default";
-  }
-}
-
-function formatDate(d?: string | null) {
-  if (!d) return "-";
-  return new Date(d).toLocaleString();
-}
 
 export default function SalesOrdersPage() {
   const router = useRouter();
@@ -199,7 +179,7 @@ export default function SalesOrdersPage() {
                       className="px-5 py-3 text-right cursor-pointer"
                       onClick={() => router.push(`/sales-orders/${so.id}`)}
                     >
-                      <Badge color={statusBadgeColor(so.status)}>
+                      <Badge color={salesOrderStatusColor(so.status)}>
                         {so.status}
                       </Badge>
                     </td>

@@ -8,6 +8,10 @@ import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { formatDate } from "@/lib/format";
+import { salesOrderStatusColor } from "@/lib/status";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 
 import {
   ArrowLeft,
@@ -16,36 +20,6 @@ import {
   CheckCircle2,
   User2,
 } from "lucide-react";
-
-type SalesOrderStatus =
-  | "DRAFT"
-  | "PENDING"
-  | "PARTIALLY_SHIPPED"
-  | "SHIPPED"
-  | "CANCELLED";
-
-function statusBadgeColor(
-  status: SalesOrderStatus
-): "default" | "success" | "warning" | "danger" {
-  switch (status) {
-    case "DRAFT":
-      return "default";
-    case "PENDING":
-    case "PARTIALLY_SHIPPED":
-      return "warning";
-    case "SHIPPED":
-      return "success";
-    case "CANCELLED":
-      return "danger";
-    default:
-      return "default";
-  }
-}
-
-function formatDate(d?: string | null) {
-  if (!d) return "-";
-  return new Date(d).toLocaleString();
-}
 
 export default function SalesOrderDetailPage() {
   const { id } = useParams();
@@ -104,14 +78,14 @@ export default function SalesOrderDetailPage() {
   if (loading)
     return (
       <DashboardShell>
-        <p className="text-sm text-[var(--text-muted)]">Loading...</p>
+        <LoadingState className="text-sm text-[var(--text-muted)]" message="Loading..." />
       </DashboardShell>
     );
 
   if (!so)
     return (
       <DashboardShell>
-        <p className="text-red-400">Sales Order not found.</p>
+        <EmptyState className="text-red-400" message="Sales Order not found." />
       </DashboardShell>
     );
 
@@ -132,7 +106,7 @@ export default function SalesOrderDetailPage() {
             <h1 className="text-2xl font-mono tracking-wide">
               {so.orderNumber}
             </h1>
-            <Badge color={statusBadgeColor(so.status)}>{so.status}</Badge>
+            <Badge color={salesOrderStatusColor(so.status)}>{so.status}</Badge>
           </div>
         </div>
 

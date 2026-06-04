@@ -6,6 +6,7 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/config";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 
 export default function SupplierDetailPage() {
@@ -114,7 +115,7 @@ export default function SupplierDetailPage() {
           <Card className="p-4 bg-[#111217] border border-[#1c1d22] rounded-xl">
             {supplier.imagePath ? (
               <img
-                src={`${process.env.NEXT_PUBLIC_API_URL}${supplier.imagePath}`}
+                src={`${API_BASE_URL}${supplier.imagePath}`}
                 alt={supplier.name}
                 className="w-full h-64 object-cover rounded-lg"
               />

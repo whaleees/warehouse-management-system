@@ -6,7 +6,10 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/config";
 import { Product } from "@/lib/types";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 
 export default function ProductDetailPage() {
@@ -40,7 +43,7 @@ export default function ProductDetailPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-sm text-gray-500 font-mono">LOADING PRODUCT...</p>
+        <LoadingState className="text-sm text-gray-500 font-mono" message="LOADING PRODUCT..." />
       </DashboardShell>
     );
   }
@@ -48,7 +51,7 @@ export default function ProductDetailPage() {
   if (!product) {
     return (
       <DashboardShell>
-        <p className="text-sm text-red-400 font-mono">PRODUCT NOT FOUND.</p>
+        <EmptyState className="text-sm text-red-400 font-mono" message="PRODUCT NOT FOUND." />
       </DashboardShell>
     );
   }
@@ -109,7 +112,7 @@ export default function ProductDetailPage() {
           <Card className="p-4 bg-[#111217] border border-[#1c1d22] rounded-xl flex items-center justify-center h-72">
             {product.imagePath ? (
               <img
-                src={`${process.env.NEXT_PUBLIC_API_URL}${product.imagePath}`}
+                src={`${API_BASE_URL}${product.imagePath}`}
                 alt={product.name}
                 className="w-full h-full object-cover rounded-xl"
               />

@@ -4,9 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Input from "@/components/ui/input";
 import Button from "@/components/ui/button";
+import { API_BASE_URL } from "@/lib/config";
 import { User, Mail, Lock } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -22,7 +21,7 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/auth/register`, {
+      const res = await fetch(`${API_BASE_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { Building2, Calendar } from "lucide-react";
 
 interface Supplier {
@@ -68,7 +68,7 @@ export default function CreatePurchaseOrderPage() {
       router.push(`/purchase-orders/${po.id}`);
     } catch (err) {
       console.error("Create PO failed:", err);
-      alert("Failed to create purchase order");
+      alert(err instanceof ApiError ? err.message : "Failed to create purchase order");
     }
     setSaving(false);
   }

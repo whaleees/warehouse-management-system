@@ -1,37 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import { Pencil, Trash2, Plus } from "lucide-react";
 import { api } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/config";
+import { useApi } from "@/lib/use-api";
 
 export default function CustomersPage() {
   const router = useRouter();
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  async function loadCustomers() {
-    try {
-      const data = await api("/customer");
-      setCustomers(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Customer API error:", err);
-      setCustomers([]);
-    }
-    setLoading(false);
-  }
+  const { data, loading, error, refetch } = useApi<any>("/customer");
+  const customers = Array.isArray(data) ? data : [];
 
   async function deleteCustomer(id: string) {
     if (!confirm("Delete this customer?")) return;
     await api(`/customer/${id}`, { method: "DELETE" });
-    loadCustomers();
+    refetch();
   }
-
-  useEffect(() => {
-    loadCustomers();
-  }, []);
 
   return (
     <DashboardShell>
@@ -59,6 +45,10 @@ export default function CustomersPage() {
         {loading ? (
           <p className="text-xs text-gray-500 font-mono tracking-wide">
             Loading customers...
+          </p>
+        ) : error ? (
+          <p className="text-xs text-red-400 font-mono tracking-wide">
+            {error}
           </p>
         ) : customers.length === 0 ? (
           <p className="text-xs text-gray-500 font-mono tracking-wide">
@@ -93,7 +83,7 @@ export default function CustomersPage() {
                   {/* IMAGE */}
                   {c.imagePath ? (
                     <img
-                      src={`${process.env.NEXT_PUBLIC_API_URL}${c.imagePath}`}
+                      src={`${API_BASE_URL}${c.imagePath}`}
                       alt={c.name}
                       className="w-full h-32 object-cover rounded-lg mb-4"
                     />

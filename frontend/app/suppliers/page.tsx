@@ -7,8 +7,7 @@ import Card from "@/components/ui/card";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import Button from "@/components/ui/button";
 import { api } from "@/lib/api";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+import { API_BASE_URL } from "@/lib/config";
 
 export default function SuppliersPage() {
   const router = useRouter();
@@ -97,7 +96,7 @@ export default function SuppliersPage() {
                   {/* IMAGE */}
                   {s.imagePath ? (
                     <img
-                      src={`${API_URL}${s.imagePath}`}
+                      src={`${API_BASE_URL}${s.imagePath}`}
                       alt={s.name}
                       className="w-full h-36 object-cover rounded-lg mb-4"
                     />

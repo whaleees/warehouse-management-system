@@ -3,11 +3,11 @@ import { InboundController } from './inbound.controller';
 import { InboundService } from './inbound.service';
 import { GoodsReceiptModule } from '../goods-receipt/goods-receipt.module';
 import { BatchModule } from '../batch/batch.module';
-import { PrismaService } from '../prisma.service';
+import { PrismaModule } from '../prisma.module';
 
 @Module({
-  imports: [GoodsReceiptModule, BatchModule],
+  imports: [GoodsReceiptModule, BatchModule, PrismaModule],
   controllers: [InboundController],
-  providers: [InboundService, PrismaService],
+  providers: [InboundService],
 })
 export class InboundModule {}

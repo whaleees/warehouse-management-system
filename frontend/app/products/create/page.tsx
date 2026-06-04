@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { api, upload } from "@/lib/api";
+import { api, upload, ApiError } from "@/lib/api";
 
 const UOMS = ["PCS", "BOX", "BOTTLE", "G", "ML"];
 const CATEGORIES = ["Seafood", "Beverages", "Grains", "Snacks", "General"];
@@ -82,7 +82,7 @@ export default function CreateProductPage() {
       router.push("/products");
     } catch (err) {
       console.error("Create product failed:", err);
-      alert("Failed to create product");
+      alert(err instanceof ApiError ? err.message : "Failed to create product");
     }
   }
 

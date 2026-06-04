@@ -7,6 +7,7 @@ import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { Pencil, Trash2, Plus } from "lucide-react";
 import { api } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/config";
 import { Product } from "@/lib/types";
 
 export default function ProductsPage() {
@@ -96,7 +97,7 @@ export default function ProductsPage() {
                   {/* IMAGE */}
                   {p.imagePath ? (
                     <img
-                      src={`${process.env.NEXT_PUBLIC_API_URL}${p.imagePath}`}
+                      src={`${API_BASE_URL}${p.imagePath}`}
                       alt={p.name}
                       className="w-full h-36 object-cover rounded-lg mb-4"
                     />

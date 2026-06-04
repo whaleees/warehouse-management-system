@@ -18,7 +18,7 @@ export default function SectionsPage() {
       const baseList = Array.isArray(res.data) ? res.data : [];
 
       const withLocationCounts = await Promise.all(
-        baseList.map(async (sec) => {
+        baseList.map(async (sec: any) => {
           try {
             const locRes = await api(`/sections/${sec.id}/locations`);
             return { ...sec, locationCount: locRes?.data?.length ?? 0 };

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { api, upload } from "@/lib/api";
+import { api, upload, ApiError } from "@/lib/api";
 
 export default function CreateCustomerPage() {
   const router = useRouter();
@@ -68,7 +68,7 @@ export default function CreateCustomerPage() {
       router.push("/customers");
     } catch (err) {
       console.error("Create customer failed:", err);
-      alert("Failed to create customer");
+      alert(err instanceof ApiError ? err.message : "Failed to create customer");
     }
   }
 
@@ -119,35 +119,35 @@ export default function CreateCustomerPage() {
             <Input
               label="Customer Code"
               value={form.code}
-              onChange={(v) => updateField("code", v)}
+              onChange={(v: string) => updateField("code", v)}
               placeholder="CUST-001"
             />
 
             <Input
               label="Name"
               value={form.name}
-              onChange={(v) => updateField("name", v)}
+              onChange={(v: string) => updateField("name", v)}
               placeholder="Customer Name"
             />
 
             <Input
               label="Contact Person"
               value={form.contact}
-              onChange={(v) => updateField("contact", v)}
+              onChange={(v: string) => updateField("contact", v)}
               placeholder="Mr. John Doe"
             />
 
             <Input
               label="Email"
               value={form.email}
-              onChange={(v) => updateField("email", v)}
+              onChange={(v: string) => updateField("email", v)}
               placeholder="example@mail.com"
             />
 
             <Input
               label="Phone"
               value={form.phone}
-              onChange={(v) => updateField("phone", v)}
+              onChange={(v: string) => updateField("phone", v)}
               placeholder="+62..."
             />
 

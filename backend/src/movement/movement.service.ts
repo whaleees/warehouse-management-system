@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateMovementDto } from './dto/create-movement.dto';
-import { MovementType } from '@prisma/client';
+import { MovementType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class MovementService {
@@ -77,8 +77,12 @@ export class MovementService {
   // IN Movement
   // -------------------------------
 
-  private async handleIN(dto: CreateMovementDto, userId: string) {
-    let inventory = await this.prisma.inventory.findUnique({
+  private async handleIN(
+    dto: CreateMovementDto,
+    userId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
+    let inventory = await db.inventory.findUnique({
       where: {
         productId_batchId_locationId: {
           productId: dto.productId,
@@ -89,7 +93,7 @@ export class MovementService {
     });
 
     if (!inventory) {
-      inventory = await this.prisma.inventory.create({
+      inventory = await db.inventory.create({
         data: {
           productId: dto.productId,
           batchId: dto.batchId,
@@ -98,21 +102,25 @@ export class MovementService {
         },
       });
     } else {
-      inventory = await this.prisma.inventory.update({
+      inventory = await db.inventory.update({
         where: { id: inventory.id },
         data: { quantity: inventory.quantity + dto.quantity },
       });
     }
 
-    return this.recordMovement(dto, inventory.id, userId);
+    return this.recordMovement(dto, inventory.id, userId, db);
   }
 
   // -------------------------------
   // OUT Movement
   // -------------------------------
 
-  private async handleOUT(dto: CreateMovementDto, userId: string) {
-    const inventory = await this.prisma.inventory.findUnique({
+  private async handleOUT(
+    dto: CreateMovementDto,
+    userId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
+    const inventory = await db.inventory.findUnique({
       where: {
         productId_batchId_locationId: {
           productId: dto.productId,
@@ -130,29 +138,35 @@ export class MovementService {
     if (inventory.quantity < dto.quantity)
       throw new BadRequestException('Insufficient stock');
 
-    await this.prisma.inventory.update({
+    await db.inventory.update({
       where: { id: inventory.id },
       data: { quantity: inventory.quantity - dto.quantity },
     });
 
-    return this.recordMovement(dto, inventory.id, userId);
+    return this.recordMovement(dto, inventory.id, userId, db);
   }
 
   // -------------------------------
-  // TRANSFER Movement (OUT + IN)
+  // TRANSFER Movement (OUT + IN, atomic)
   // -------------------------------
 
   private async handleTRANSFER(dto: CreateMovementDto, userId: string) {
-    await this.handleOUT({ ...dto, type: MovementType.OUT }, userId);
-    return this.handleIN({ ...dto, type: MovementType.IN }, userId);
+    return this.prisma.$transaction(async (tx) => {
+      await this.handleOUT({ ...dto, type: MovementType.OUT }, userId, tx);
+      return this.handleIN({ ...dto, type: MovementType.IN }, userId, tx);
+    });
   }
 
   // -------------------------------
   // ADJUSTMENT Movement (+ or -)
   // -------------------------------
 
-  private async handleADJUSTMENT(dto: CreateMovementDto, userId: string) {
-    const inventory = await this.prisma.inventory.findUnique({
+  private async handleADJUSTMENT(
+    dto: CreateMovementDto,
+    userId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
+    const inventory = await db.inventory.findUnique({
       where: {
         productId_batchId_locationId: {
           productId: dto.productId,
@@ -170,12 +184,12 @@ export class MovementService {
     if (newQty < 0)
       throw new BadRequestException('Adjustment cannot make quantity < 0');
 
-    await this.prisma.inventory.update({
+    await db.inventory.update({
       where: { id: inventory.id },
       data: { quantity: newQty },
     });
 
-    return this.recordMovement(dto, inventory.id, userId);
+    return this.recordMovement(dto, inventory.id, userId, db);
   }
 
   // -------------------------------
@@ -186,8 +200,9 @@ export class MovementService {
     dto: CreateMovementDto,
     inventoryId: string,
     userId: string,
+    db: Prisma.TransactionClient = this.prisma,
   ) {
-    return this.prisma.stockMovement.create({
+    return db.stockMovement.create({
       data: {
         ...dto,
         inventoryId,

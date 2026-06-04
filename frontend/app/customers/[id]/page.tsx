@@ -6,6 +6,9 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/config";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 
 export default function CustomerDetailPage() {
@@ -39,7 +42,7 @@ export default function CustomerDetailPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-sm text-gray-500 font-mono">LOADING CUSTOMER...</p>
+        <LoadingState className="text-sm text-gray-500 font-mono" message="LOADING CUSTOMER..." />
       </DashboardShell>
     );
   }
@@ -47,7 +50,7 @@ export default function CustomerDetailPage() {
   if (!customer) {
     return (
       <DashboardShell>
-        <p className="text-sm text-red-400 font-mono">CUSTOMER NOT FOUND.</p>
+        <EmptyState className="text-sm text-red-400 font-mono" message="CUSTOMER NOT FOUND." />
       </DashboardShell>
     );
   }
@@ -106,7 +109,7 @@ export default function CustomerDetailPage() {
           <Card className="p-4 bg-[#111217] border border-[#1c1d22] rounded-xl flex items-center justify-center h-72">
             {customer.imagePath ? (
               <img
-                src={`${process.env.NEXT_PUBLIC_API_URL}${customer.imagePath}`}
+                src={`${API_BASE_URL}${customer.imagePath}`}
                 alt={customer.name}
                 className="w-full h-full object-cover rounded-xl"
               />

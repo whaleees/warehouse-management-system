@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { ArrowLeft, MapPin } from "lucide-react";
 
 export default function CreateSectionPage() {
@@ -33,7 +33,7 @@ export default function CreateSectionPage() {
       router.push("/sections");
     } catch (err) {
       console.error(err);
-      alert("Failed to create section");
+      alert(err instanceof ApiError ? err.message : "Failed to create section");
     }
     setSaving(false);
   }

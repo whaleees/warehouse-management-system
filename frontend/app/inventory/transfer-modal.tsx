@@ -5,11 +5,32 @@ import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { api } from "@/lib/api";
 
-export default function TransferModal({ inv, onClose, onSuccess }) {
+interface TransferInventory {
+  productId: string;
+  batchId: string;
+  locationId: string;
+  quantity: number;
+  product: { name: string };
+  batch: { code: string };
+  location: { code: string };
+}
+
+interface TransferOption {
+  id: string;
+  code: string;
+}
+
+interface TransferModalProps {
+  inv: TransferInventory;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export default function TransferModal({ inv, onClose, onSuccess }: TransferModalProps) {
   const [qty, setQty] = useState(1);
-  const [sections, setSections] = useState([]);
+  const [sections, setSections] = useState<TransferOption[]>([]);
   const [selectedSection, setSelectedSection] = useState("");
-  const [locations, setLocations] = useState([]);
+  const [locations, setLocations] = useState<TransferOption[]>([]);
   const [selectedLocation, setSelectedLocation] = useState("");
 
   async function loadSections() {

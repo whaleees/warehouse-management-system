@@ -8,6 +8,11 @@ import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { formatDate } from "@/lib/format";
+import { grStatusColor } from "@/lib/status";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
+import { useInboundDetail } from "./use-inbound-detail";
 
 import {
   ArrowLeft,
@@ -21,93 +26,22 @@ import {
   Clock3,
 } from "lucide-react";
 
-type GRStatus = "PENDING" | "RECEIVED";
-
-interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  uom: string;
-}
-
-interface PurchaseOrderItem {
-  id: string;
-  quantity: number;
-  product: Product;
-
-  // IMPORTANT — backend already returns these
-  received?: number;
-  remaining?: number;
-}
-
-interface Supplier {
-  id: string;
-  name: string;
-  code: string;
-}
-
-interface PurchaseOrder {
-  id: string;
-  orderNumber: string;
-  supplier?: Supplier;
-  items: PurchaseOrderItem[];
-}
-
-interface InboundLine {
-  id: string;
-  quantity: number;
-  purchaseOrderItemId: string;
-  product: Product;
-  batch: {
-    id: string;
-    batchNumber: string;
-    expiryDate?: string | null;
-  };
-  location: {
-    id: string;
-    code: string;
-    section?: {
-      id: string;
-      code: string;
-    };
-  };
-}
-
-interface InboundDetail {
-  id: string;
-  receiptNumber: string;
-  status: GRStatus;
-  receivedAt: string;
-  createdAt: string;
-  purchaseOrder: PurchaseOrder;
-  lines: InboundLine[];
-}
-
-function formatDate(d?: string | null) {
-  if (!d) return "-";
-  return new Date(d).toLocaleString();
-}
-
-function statusBadgeColor(
-  status: GRStatus
-): "default" | "success" | "warning" | "danger" {
-  switch (status) {
-    case "PENDING":
-      return "warning";
-    case "RECEIVED":
-      return "success";
-    default:
-      return "default";
-  }
-}
 
 export default function InboundDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
 
-  const [gr, setGr] = useState<InboundDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    gr,
+    loading,
+    sections,
+    locations,
+    setLocations,
+    reload: loadInbound,
+    loadLocations,
+  } = useInboundDetail(id);
+
   const [acting, setActing] = useState(false);
 
   // Scanner state
@@ -116,49 +50,16 @@ export default function InboundDetailPage() {
   const [qty, setQty] = useState<number>(0);
 
   // Sections/Locations
-  const [sections, setSections] = useState<any[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState("");
-  const [locations, setLocations] = useState<any[]>([]);
   const [locationId, setLocationId] = useState("");
-  const [expiryDate, setExpiryDate] = useState<string>(""); 
+  const [expiryDate, setExpiryDate] = useState<string>("");
 
-  async function loadInbound() {
-    try {
-      const data = await api(`/inbound/${id}`);
-      setGr(data);
-
-      if (data?.purchaseOrder?.items?.length && !selectedItemId) {
-        setSelectedItemId(data.purchaseOrder.items[0].id);
-      }
-    } catch (err) {
-      console.error("Load inbound failed:", err);
-      setGr(null);
-    }
-    setLoading(false);
-  }
-
-  async function loadSections() {
-    try {
-      const data = await api("/sections?page=1&limit=999");
-      setSections(data.data ?? []);
-    } catch {
-      setSections([]);
-    }
-  }
-
-  async function loadLocations(sectionId: string) {
-    try {
-      const res = await api(`/sections/${sectionId}/locations?page=1&limit=999`);
-      setLocations(res.data ?? []);
-    } catch {
-      setLocations([]);
-    }
-  }
-
+  // Auto-select first PO item once the GR loads (only when nothing is selected).
   useEffect(() => {
-    loadInbound();
-    loadSections();
-  }, [id]);
+    if (gr?.purchaseOrder?.items?.length && !selectedItemId) {
+      setSelectedItemId(gr.purchaseOrder.items[0].id);
+    }
+  }, [gr, selectedItemId]);
 
   // --------------------------------------------
   // 🚀 FIXED: Use backend-calculated received/remaining
@@ -255,7 +156,7 @@ export default function InboundDetailPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-sm text-[var(--text-muted)]">Loading inbound...</p>
+        <LoadingState className="text-sm text-[var(--text-muted)]" message="Loading inbound..." />
       </DashboardShell>
     );
   }
@@ -263,7 +164,7 @@ export default function InboundDetailPage() {
   if (!gr) {
     return (
       <DashboardShell>
-        <p className="text-sm text-red-400">Inbound not found.</p>
+        <EmptyState className="text-sm text-red-400" message="Inbound not found." />
       </DashboardShell>
     );
   }
@@ -287,7 +188,7 @@ export default function InboundDetailPage() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-semibold">{gr.receiptNumber}</h1>
-                <Badge color={statusBadgeColor(gr.status)}>{gr.status}</Badge>
+                <Badge color={grStatusColor(gr.status)}>{gr.status}</Badge>
               </div>
 
               <p className="text-xs text-[var(--text-muted)] mt-1">

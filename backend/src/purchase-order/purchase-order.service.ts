@@ -8,8 +8,9 @@ import { PrismaService } from '../prisma.service';
 import { CreatePurchaseOrderDto } from './dto/create-po.dto';
 import { AddPOItemDto } from './dto/add-item.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-po.dto';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 import { UpdatePOItemDto } from './dto/update-item.dto';
+import { withReceivedRemaining } from './po-projection.util';
 
 @Injectable()
 export class PurchaseOrderService {
@@ -165,17 +166,7 @@ export class PurchaseOrderService {
 
     return pos.map((po) => ({
       ...po,
-      items: po.items.map((item) => {
-        const received = item.receiptLines.reduce(
-          (sum, ln) => sum + ln.quantity,
-          0,
-        );
-        return {
-          ...item,
-          received,
-          remaining: Math.max(item.quantity - received, 0),
-        };
-      }),
+      items: withReceivedRemaining(po.items),
     }));
   }
 
@@ -201,22 +192,9 @@ export class PurchaseOrderService {
     if (!po) throw new NotFoundException('Purchase order not found');
 
     // 🟩 Calculate received + remaining so FE displays correctly
-    const items = po.items.map((item) => {
-      const received = item.receiptLines.reduce(
-        (sum, ln) => sum + ln.quantity,
-        0,
-      );
-
-      return {
-        ...item,
-        received,
-        remaining: Math.max(item.quantity - received, 0),
-      };
-    });
-
     return {
       ...po,
-      items,
+      items: withReceivedRemaining(po.items),
     };
   }
 
@@ -286,17 +264,23 @@ export class PurchaseOrderService {
     });
   }
 
-  async updateStatus(poId: string) {
-    const poItems = await this.prisma.purchaseOrderItem.findMany({
+  /**
+   * Recomputes and persists a PO's status from its received quantities.
+   * Canonical implementation shared with GoodsReceiptService; accepts a
+   * transaction client so it can participate in an enclosing transaction.
+   */
+  async recomputeStatus(
+    poId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
+    const poItems = await db.purchaseOrderItem.findMany({
       where: { purchaseOrderId: poId },
     });
 
-    if (poItems.length === 0) {
-      // if no items, keep whatever status it already has
-      return this.prisma.purchaseOrder.findUnique({ where: { id: poId } });
-    }
+    // if no items, keep whatever status it already has
+    if (poItems.length === 0) return;
 
-    const received = await this.prisma.goodsReceiptLine.groupBy({
+    const received = await db.goodsReceiptLine.groupBy({
       by: ['purchaseOrderItemId'],
       where: {
         purchaseOrderItem: { purchaseOrderId: poId },
@@ -326,7 +310,7 @@ export class PurchaseOrderService {
         ? OrderStatus.PARTIALLY_RECEIVED
         : OrderStatus.PENDING;
 
-    return this.prisma.purchaseOrder.update({
+    await db.purchaseOrder.update({
       where: { id: poId },
       data: { status: newStatus },
     });

@@ -8,6 +8,8 @@ import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { formatDate } from "@/lib/format";
+import { grStatusColor } from "@/lib/status";
 import { Truck, ArrowRight } from "lucide-react";
 
 type GRStatus = "PENDING" | "RECEIVED";
@@ -26,15 +28,6 @@ interface InboundRow {
       code: string;
     };
   };
-}
-
-function statusBadgeColor(status: GRStatus): "success" | "warning" | "default" {
-  return status === "RECEIVED" ? "success" : "warning";
-}
-
-function formatDate(d?: string | null) {
-  if (!d) return "-";
-  return new Date(d).toLocaleString();
 }
 
 export default function InboundListPage() {
@@ -169,7 +162,7 @@ export default function InboundListPage() {
                     </td>
 
                     <td className="px-4 py-3 text-center">
-                      <Badge color={statusBadgeColor(row.status)}>
+                      <Badge color={grStatusColor(row.status)}>
                         {row.status}
                       </Badge>
                     </td>

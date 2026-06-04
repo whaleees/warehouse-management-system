@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Plus } from "lucide-react";
 
@@ -42,7 +42,7 @@ export default function CreateLocationPage() {
       router.push(`/sections/${sectionId}`);
     } catch (err) {
       console.error("Create location failed:", err);
-      alert("Failed to create location");
+      alert(err instanceof ApiError ? err.message : "Failed to create location");
     }
 
     setLoading(false);

@@ -7,6 +7,7 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { shipmentStatusColor } from "@/lib/status";
 
 import {
   ArrowLeft,
@@ -34,24 +35,6 @@ interface Location {
   type: string;
 }
 
-type ShipmentStatus = "DRAFT" | "IN_TRANSIT" | "DELIVERED" | "CANCELLED";
-
-function statusBadgeColor(
-  status: ShipmentStatus
-): "default" | "success" | "warning" | "danger" {
-  switch (status) {
-    case "DRAFT":
-      return "default";
-    case "IN_TRANSIT":
-      return "warning";
-    case "DELIVERED":
-      return "success";
-    case "CANCELLED":
-      return "danger";
-    default:
-      return "default";
-  }
-}
 
 export default function ShipmentDetailPage() {
   const { id } = useParams();
@@ -61,6 +44,7 @@ export default function ShipmentDetailPage() {
   const [salesOrder, setSalesOrder] = useState<any>(null);
   const [items, setItems] = useState<SalesOrderItem[]>([]);
   const [acting, setActing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [sections, setSections] = useState<Section[]>([]);
   const [selectedSection, setSelectedSection] = useState("");
@@ -78,21 +62,29 @@ export default function ShipmentDetailPage() {
   // ==========================
 
   async function loadShipmentAndSo() {
-    const sh = await api(`/shipment/${id}`);
-    setShipment(sh);
+    try {
+      const sh = await api(`/shipment/${id}`);
+      setShipment(sh);
 
-    const so = await api(`/sales-order/${sh.salesOrderId}`);
-    setSalesOrder(so);
+      const so = await api(`/sales-order/${sh.salesOrderId}`);
+      setSalesOrder(so);
 
-    const mapped = so.items.map((it: any) => {
-      const shipped = sh.lines
-        .filter((l: any) => l.salesOrderItemId === it.id)
-        .reduce((sum: number, x: any) => sum + x.quantity, 0);
+      const mapped = so.items.map((it: any) => {
+        const shipped = sh.lines
+          .filter((l: any) => l.salesOrderItemId === it.id)
+          .reduce((sum: number, x: any) => sum + x.quantity, 0);
 
-      return { ...it, shippedQty: shipped };
-    });
+        return { ...it, shippedQty: shipped };
+      });
 
-    setItems(mapped);
+      setItems(mapped);
+    } catch (err) {
+      console.error("Load shipment failed:", err);
+      setShipment(null);
+      setSalesOrder(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadSections() {
@@ -244,8 +236,16 @@ export default function ShipmentDetailPage() {
     setActing(false);
   }
 
-  if (!shipment || !salesOrder) {
+  if (loading) {
     return <DashboardShell>Loading...</DashboardShell>;
+  }
+
+  if (!shipment || !salesOrder) {
+    return (
+      <DashboardShell>
+        <p className="text-sm text-red-400">Shipment not found.</p>
+      </DashboardShell>
+    );
   }
 
   // ==========================
@@ -273,7 +273,7 @@ export default function ShipmentDetailPage() {
             </p>
           </div>
 
-          <Badge className="ml-3" color={statusBadgeColor(shipment.status)}>
+          <Badge className="ml-3" color={shipmentStatusColor(shipment.status)}>
             {shipment.status}
           </Badge>
         </div>

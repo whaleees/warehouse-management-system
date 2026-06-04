@@ -6,6 +6,8 @@ import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { formatDateOnly } from "@/lib/format";
+import { orderStatusColor } from "@/lib/status";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -43,27 +45,6 @@ interface PurchaseOrder {
   expectedDate?: string;
   supplier: Supplier;
   items: PurchaseOrderItem[];
-}
-
-function formatDate(d?: string | null) {
-  if (!d) return "-";
-  return new Date(d).toLocaleDateString();
-}
-
-function statusColor(status: OrderStatus) {
-  switch (status) {
-    case "DRAFT":
-      return "default";
-    case "PENDING":
-    case "PARTIALLY_RECEIVED":
-      return "warning";
-    case "RECEIVED":
-      return "success";
-    case "CANCELLED":
-      return "danger";
-    default:
-      return "default";
-  }
 }
 
 export default function PurchaseOrdersPage() {
@@ -174,7 +155,7 @@ export default function PurchaseOrdersPage() {
 
                       {/* Status */}
                       <td className="px-4 py-3">
-                        <Badge color={statusColor(po.status)}>
+                        <Badge color={orderStatusColor(po.status)}>
                           {po.status}
                         </Badge>
                       </td>
@@ -184,10 +165,10 @@ export default function PurchaseOrdersPage() {
                         <div className="flex flex-col text-xs">
                           <span className="flex items-center gap-1 text-gray-500">
                             <Clock3 size={11} /> ORDER:{" "}
-                            <span className="text-white">{formatDate(po.orderDate)}</span>
+                            <span className="text-white">{formatDateOnly(po.orderDate)}</span>
                           </span>
                           <span className="text-gray-500">
-                            ETA: <span className="text-white">{formatDate(po.expectedDate)}</span>
+                            ETA: <span className="text-white">{formatDateOnly(po.expectedDate)}</span>
                           </span>
                         </div>
                       </td>

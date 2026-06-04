@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 
 interface SalesOrder {
   id: string;
@@ -51,7 +51,7 @@ export default function CreateShipmentPage() {
 
       router.push(`/shipments/${sh.id}`);
     } catch (err) {
-      alert("Failed to create shipment.");
+      alert(err instanceof ApiError ? err.message : "Failed to create shipment.");
     }
     setLoading(false);
   }

@@ -10,15 +10,18 @@ import {
   ReferenceType,
   SalesOrderStatus,
   ShipmentStatus,
-  ShipmentLine,
+  Prisma,
 } from '@prisma/client';
 
 @Injectable()
 export class OutboundService {
   constructor(private prisma: PrismaService) {}
 
-  async updateSalesOrderStatusFromShipments(salesOrderId: string) {
-    const so = await this.prisma.salesOrder.findUnique({
+  async updateSalesOrderStatusFromShipments(
+    salesOrderId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
+    const so = await db.salesOrder.findUnique({
       where: { id: salesOrderId },
       include: { items: true },
     });
@@ -27,7 +30,7 @@ export class OutboundService {
 
     const ordered = so.items.reduce((acc, item) => acc + item.quantity, 0);
 
-    const shippedLines = await this.prisma.shipmentLine.findMany({
+    const shippedLines = await db.shipmentLine.findMany({
       where: { salesOrderItem: { salesOrderId } },
     });
 
@@ -37,17 +40,15 @@ export class OutboundService {
       return;
     }
 
-    if (shipped < ordered) {
-      await this.prisma.salesOrder.update({
-        where: { id: salesOrderId },
-        data: { status: SalesOrderStatus.PARTIALLY_SHIPPED },
-      });
-    } else {
-      await this.prisma.salesOrder.update({
-        where: { id: salesOrderId },
-        data: { status: SalesOrderStatus.SHIPPED },
-      });
-    }
+    await db.salesOrder.update({
+      where: { id: salesOrderId },
+      data: {
+        status:
+          shipped < ordered
+            ? SalesOrderStatus.PARTIALLY_SHIPPED
+            : SalesOrderStatus.SHIPPED,
+      },
+    });
   }
 
   async createShipmentForSalesOrder(salesOrderId: string, userId: string) {
@@ -146,90 +147,69 @@ export class OutboundService {
       );
     }
 
-    // 🔥 ONLY look at the selected location
-    const inventories = await this.prisma.inventory.findMany({
-      where: {
-        productId: soItem.productId,
-        locationId: fromLocationId,
-      },
-      include: {
-        batch: true,
-        location: true,
-      },
-      orderBy: [{ batch: { expiryDate: 'asc' } }, { createdAt: 'asc' }],
-    });
-
-    if (inventories.length === 0) {
-      throw new BadRequestException(
-        'Selected location has no inventory for this product',
-      );
-    }
-
-    let remaining = quantity;
-    const createdLines: ShipmentLine[] = [];
-
-    for (const inv of inventories) {
-      const available = inv.quantity - inv.reservedQty;
-      if (available <= 0) continue;
-
-      const take = Math.min(available, remaining);
-      if (take <= 0) continue;
-
-      await this.prisma.inventory.update({
-        where: { id: inv.id },
-        data: {
-          reservedQty: inv.reservedQty + take,
-        },
-      });
-
-      const line = await this.prisma.shipmentLine.create({
-        data: {
-          shipmentId,
-          salesOrderItemId,
+    // Allocate + reserve atomically: if we can't fully satisfy the request the
+    // thrown error rolls back every reservation and created line — no manual
+    // compensation needed.
+    return this.prisma.$transaction(async (tx) => {
+      // FEFO: only the selected location, earliest expiry first
+      const inventories = await tx.inventory.findMany({
+        where: {
           productId: soItem.productId,
-          batchId: inv.batchId,
-          fromLocationId: inv.locationId, // ✅ strictly the filtered location
-          quantity: take,
+          locationId: fromLocationId,
         },
+        include: {
+          batch: true,
+          location: true,
+        },
+        orderBy: [{ batch: { expiryDate: 'asc' } }, { createdAt: 'asc' }],
       });
 
-      createdLines.push(line);
-      remaining -= take;
+      if (inventories.length === 0) {
+        throw new BadRequestException(
+          'Selected location has no inventory for this product',
+        );
+      }
 
-      if (remaining === 0) break;
-    }
+      let remaining = quantity;
+      const createdLines: Prisma.ShipmentLineGetPayload<object>[] = [];
 
-    if (remaining > 0) {
-      // rollback reservations & lines
-      for (const line of createdLines) {
-        const inv = await this.prisma.inventory.findUnique({
-          where: {
-            productId_batchId_locationId: {
-              productId: line.productId,
-              batchId: line.batchId,
-              locationId: line.fromLocationId,
-            },
+      for (const inv of inventories) {
+        const available = inv.quantity - inv.reservedQty;
+        if (available <= 0) continue;
+
+        const take = Math.min(available, remaining);
+        if (take <= 0) continue;
+
+        await tx.inventory.update({
+          where: { id: inv.id },
+          data: { reservedQty: { increment: take } },
+        });
+
+        const line = await tx.shipmentLine.create({
+          data: {
+            shipmentId,
+            salesOrderItemId,
+            productId: soItem.productId,
+            batchId: inv.batchId,
+            fromLocationId: inv.locationId,
+            quantity: take,
           },
         });
 
-        if (inv) {
-          await this.prisma.inventory.update({
-            where: { id: inv.id },
-            data: {
-              reservedQty: Math.max(inv.reservedQty - line.quantity, 0),
-            },
-          });
-        }
+        createdLines.push(line);
+        remaining -= take;
 
-        await this.prisma.shipmentLine.delete({ where: { id: line.id } });
+        if (remaining === 0) break;
       }
 
-      throw new BadRequestException(
-        'Insufficient available inventory at the selected location to fulfill this shipment',
-      );
-    }
+      if (remaining > 0) {
+        throw new BadRequestException(
+          'Insufficient available inventory at the selected location to fulfill this shipment',
+        );
+      }
 
-    return createdLines;
+      return createdLines;
+    });
   }
 
   async shipShipment(shipmentId: string, userId: string) {
@@ -252,63 +232,61 @@ export class OutboundService {
     if (shipment.lines.length === 0)
       throw new BadRequestException('Cannot ship an empty shipment');
 
-    for (const line of shipment.lines) {
-      const inv = await this.prisma.inventory.findUnique({
-        where: {
-          productId_batchId_locationId: {
-            productId: line.productId,
-            batchId: line.batchId,
-            locationId: line.fromLocationId,
+    await this.prisma.$transaction(
+      async (tx) => {
+        for (const line of shipment.lines) {
+          // Conditional atomic decrement: only succeeds if both physical and
+          // reserved quantities are sufficient, so concurrent ships cannot
+          // oversell and quantities can never go negative.
+          const result = await tx.inventory.updateMany({
+            where: {
+              productId: line.productId,
+              batchId: line.batchId,
+              locationId: line.fromLocationId,
+              quantity: { gte: line.quantity },
+              reservedQty: { gte: line.quantity },
+            },
+            data: {
+              quantity: { decrement: line.quantity },
+              reservedQty: { decrement: line.quantity },
+            },
+          });
+
+          if (result.count === 0) {
+            throw new BadRequestException(
+              `Insufficient physical or reserved quantity for shipment line ${line.id}`,
+            );
+          }
+
+          await tx.stockMovement.create({
+            data: {
+              type: MovementType.OUT,
+              quantity: line.quantity,
+              productId: line.productId,
+              batchId: line.batchId,
+              fromLocationId: line.fromLocationId,
+              referenceType: ReferenceType.SHIPMENT,
+              referenceId: shipmentId,
+              userId,
+            },
+          });
+        }
+
+        await tx.shipment.update({
+          where: { id: shipmentId },
+          data: {
+            status: ShipmentStatus.IN_TRANSIT,
+            shippedAt: new Date(),
           },
-        },
-      });
+        });
 
-      if (!inv)
-        throw new NotFoundException(
-          'Inventory not found for product/batch/location during shipment',
+        await this.updateSalesOrderStatusFromShipments(
+          shipment.salesOrderId,
+          tx,
         );
-
-      if (inv.reservedQty < line.quantity)
-        throw new BadRequestException(
-          `Reserved quantity insufficient for shipment line ${line.id}`,
-        );
-
-      if (inv.quantity < line.quantity)
-        throw new BadRequestException(
-          `Physical quantity insufficient for shipment line ${line.id}`,
-        );
-
-      await this.prisma.inventory.update({
-        where: { id: inv.id },
-        data: {
-          reservedQty: inv.reservedQty - line.quantity,
-          quantity: inv.quantity - line.quantity,
-        },
-      });
-
-      await this.prisma.stockMovement.create({
-        data: {
-          type: MovementType.OUT,
-          quantity: line.quantity,
-          productId: line.productId,
-          batchId: line.batchId,
-          fromLocationId: line.fromLocationId,
-          referenceType: ReferenceType.SHIPMENT,
-          referenceId: shipmentId,
-          userId,
-        },
-      });
-    }
-
-    await this.prisma.shipment.update({
-      where: { id: shipmentId },
-      data: {
-        status: ShipmentStatus.IN_TRANSIT,
-        shippedAt: new Date(),
       },
-    });
-
-    await this.updateSalesOrderStatusFromShipments(shipment.salesOrderId);
+      { timeout: 20000 },
+    );
 
     return { message: 'Shipment marked as IN_TRANSIT' };
   }
@@ -355,33 +333,40 @@ export class OutboundService {
       );
     }
 
-    for (const line of shipment.lines) {
-      const inv = await this.prisma.inventory.findUnique({
-        where: {
-          productId_batchId_locationId: {
+    // Idempotent: cancelling an already-cancelled shipment must not release
+    // reservations a second time.
+    if (shipment.status === ShipmentStatus.CANCELLED) {
+      return { message: 'Shipment already cancelled' };
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Re-check inside the transaction to guard against a concurrent cancel.
+      const fresh = await tx.shipment.findUnique({
+        where: { id: shipmentId },
+      });
+
+      if (!fresh || fresh.status === ShipmentStatus.CANCELLED) return;
+
+      for (const line of shipment.lines) {
+        await tx.inventory.updateMany({
+          where: {
             productId: line.productId,
             batchId: line.batchId,
             locationId: line.fromLocationId,
           },
-        },
-      });
-
-      if (inv) {
-        await this.prisma.inventory.update({
-          where: { id: inv.id },
           data: {
-            reservedQty: Math.max(inv.reservedQty - line.quantity, 0),
+            reservedQty: { decrement: line.quantity },
           },
         });
       }
-    }
 
-    await this.prisma.shipment.update({
-      where: { id: shipmentId },
-      data: { status: ShipmentStatus.CANCELLED },
+      await tx.shipment.update({
+        where: { id: shipmentId },
+        data: { status: ShipmentStatus.CANCELLED },
+      });
+
+      await this.updateSalesOrderStatusFromShipments(shipment.salesOrderId, tx);
     });
-
-    await this.updateSalesOrderStatusFromShipments(shipment.salesOrderId);
 
     return { message: 'Shipment cancelled and reservations released' };
   }

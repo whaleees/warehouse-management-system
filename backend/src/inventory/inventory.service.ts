@@ -102,31 +102,57 @@ export class InventoryService {
       },
     });
 
-    const enriched = await Promise.all(
-      movements.map(async (m) => {
-        let reference: any = null;
+    // Batch the reference lookups instead of one query per movement (N+1).
+    const poIds = [
+      ...new Set(
+        movements
+          .filter((m) => m.referenceType === 'PURCHASE_ORDER' && m.referenceId)
+          .map((m) => m.referenceId!),
+      ),
+    ];
+    const soIds = [
+      ...new Set(
+        movements
+          .filter((m) => m.referenceType === 'SALES_ORDER' && m.referenceId)
+          .map((m) => m.referenceId!),
+      ),
+    ];
 
-        if (m.referenceType === 'PURCHASE_ORDER') {
-          reference = await this.prisma.purchaseOrder.findUnique({
-            where: { id: m.referenceId! },
-            select: { orderNumber: true, supplier: true },
-          });
-        }
+    const [purchaseOrders, salesOrders] = await Promise.all([
+      poIds.length
+        ? this.prisma.purchaseOrder.findMany({
+            where: { id: { in: poIds } },
+            select: { id: true, orderNumber: true, supplier: true },
+          })
+        : Promise.resolve([]),
+      soIds.length
+        ? this.prisma.salesOrder.findMany({
+            where: { id: { in: soIds } },
+            select: { id: true, orderNumber: true, customer: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
-        if (m.referenceType === 'SALES_ORDER') {
-          reference = await this.prisma.salesOrder.findUnique({
-            where: { id: m.referenceId! },
-            select: { orderNumber: true, customer: true },
-          });
-        }
-
-        return {
-          ...m,
-          reference,
-        };
-      }),
+    const poMap = new Map(
+      purchaseOrders.map(({ id: poId, ...rest }) => [poId, rest] as const),
+    );
+    const soMap = new Map(
+      salesOrders.map(({ id: soId, ...rest }) => [soId, rest] as const),
     );
 
-    return enriched;
+    return movements.map((m) => {
+      let reference: any = null;
+
+      if (m.referenceType === 'PURCHASE_ORDER' && m.referenceId) {
+        reference = poMap.get(m.referenceId) ?? null;
+      } else if (m.referenceType === 'SALES_ORDER' && m.referenceId) {
+        reference = soMap.get(m.referenceId) ?? null;
+      }
+
+      return {
+        ...m,
+        reference,
+      };
+    });
   }
 }

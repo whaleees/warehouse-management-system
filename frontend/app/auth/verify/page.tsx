@@ -1,14 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Button from "@/components/ui/button";
 import CodeInput from "@/components/ui/code-input";
-import { ShieldCheck } from "lucide-react";
+import { API_BASE_URL } from "@/lib/config";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
-export default function VerifyPage() {
+function VerifyForm() {
   const router = useRouter();
   const search = useSearchParams();
   const email = search.get("email") ?? "";
@@ -23,7 +21,7 @@ export default function VerifyPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/auth/verify`, {
+      const res = await fetch(`${API_BASE_URL}/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code }),
@@ -112,5 +110,17 @@ export default function VerifyPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#0b0c0f] px-4" />
+      }
+    >
+      <VerifyForm />
+    </Suspense>
   );
 }

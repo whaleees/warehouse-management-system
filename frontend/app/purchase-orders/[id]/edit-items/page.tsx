@@ -6,6 +6,9 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { formatIDR } from "@/lib/format";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { ArrowLeft, Package, Plus, Trash2 } from "lucide-react";
 
 interface Product {
@@ -123,7 +126,7 @@ export default function EditPoItemsPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-sm text-[var(--text-muted)]">Loading...</p>
+        <LoadingState className="text-sm text-[var(--text-muted)]" message="Loading..." />
       </DashboardShell>
     );
   }
@@ -131,7 +134,7 @@ export default function EditPoItemsPage() {
   if (!po) {
     return (
       <DashboardShell>
-        <p className="text-sm text-red-400">Purchase Order not found.</p>
+        <EmptyState className="text-sm text-red-400" message="Purchase Order not found." />
       </DashboardShell>
     );
   }
@@ -286,19 +289,13 @@ export default function EditPoItemsPage() {
                               className="w-24 px-2 py-1 bg-[#111217] border border-[#1c1d22] rounded"
                             />
                           ) : (
-                            Number(it.unitPrice).toLocaleString("id-ID", {
-                              style: "currency",
-                              currency: "IDR",
-                            })
+                            formatIDR(Number(it.unitPrice))
                           )}
                         </td>
 
                         {/* LINE TOTAL */}
                         <td className="px-4 py-3 text-right">
-                          {lineTotal.toLocaleString("id-ID", {
-                            style: "currency",
-                            currency: "IDR",
-                          })}
+                          {formatIDR(lineTotal)}
                         </td>
 
                         {/* ACTIONS */}
@@ -420,10 +417,7 @@ export default function EditPoItemsPage() {
             <div className="flex flex-col gap-1 text-right">
               <label className="text-xs text-[var(--text-muted)]">Line Total</label>
               <div className="text-sm font-semibold mb-2">
-                {newLineTotal.toLocaleString("id-ID", {
-                  style: "currency",
-                  currency: "IDR",
-                })}
+                {formatIDR(newLineTotal)}
               </div>
 
               <Button

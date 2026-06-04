@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { Plus, Trash2 } from "lucide-react";
 
 interface Customer {
@@ -208,7 +208,7 @@ export default function CreateSalesOrderPage() {
       router.push(`/sales-orders/${soId}`);
     } catch (err) {
       console.error("Create SO failed:", err);
-      alert("Failed to create SO.");
+      alert(err instanceof ApiError ? err.message : "Failed to create SO.");
     }
 
     setLoading(false);

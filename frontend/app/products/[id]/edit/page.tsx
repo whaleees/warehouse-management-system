@@ -6,6 +6,7 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/config";
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -92,7 +93,7 @@ export default function EditProductPage() {
         <div className="w-full h-64 bg-[#0d0e10] border border-[#1c1d22] rounded-xl flex items-center justify-center overflow-hidden">
           {form.imagePath ? (
             <img
-              src={`${process.env.NEXT_PUBLIC_API_URL}${form.imagePath}`}
+              src={`${API_BASE_URL}${form.imagePath}`}
               alt="Product"
               className="w-full h-full object-cover rounded-lg"
             />

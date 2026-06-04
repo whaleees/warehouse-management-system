@@ -1,7 +1,14 @@
-export const formatDate = (date: string | Date) =>
-  new Intl.DateTimeFormat("en-US").format(new Date(date));
+/** Date + time, null-safe. Matches the dominant `toLocaleString()` usage. */
+export const formatDate = (d?: string | Date | null) =>
+  d ? new Date(d).toLocaleString() : "-";
 
-export const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-    value
-  );
+/** Date only, null-safe. */
+export const formatDateOnly = (d?: string | Date | null) =>
+  d ? new Date(d).toLocaleDateString() : "-";
+
+/** Indonesian Rupiah currency formatting. */
+export const formatIDR = (n: number) =>
+  Number(n || 0).toLocaleString("id-ID", {
+    style: "currency",
+    currency: "IDR",
+  });

@@ -7,11 +7,15 @@ import {
 import { PrismaService } from '../prisma.service';
 import { CreateGoodsReceiptDto } from './dto/create-gr.dto';
 import { AddGRLineDto } from './dto/add-line.dto';
-import { GoodsReceiptStatus, OrderStatus } from '@prisma/client';
+import { GoodsReceiptStatus, OrderStatus, Prisma } from '@prisma/client';
+import { PurchaseOrderService } from '../purchase-order/purchase-order.service';
 
 @Injectable()
 export class GoodsReceiptService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private purchaseOrderService: PurchaseOrderService,
+  ) {}
 
   async create(dto: CreateGoodsReceiptDto, userId: string) {
     const po = await this.prisma.purchaseOrder.findUnique({
@@ -96,13 +100,17 @@ export class GoodsReceiptService {
       },
     });
 
-    await this.updatePOStatus(gr.purchaseOrderId);
+    await this.purchaseOrderService.recomputeStatus(gr.purchaseOrderId);
 
     return line;
   }
 
-  async finalize(grId: string, userId: string) {
-    const gr = await this.prisma.goodsReceipt.findUnique({
+  async finalize(
+    grId: string,
+    userId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
+    const gr = await db.goodsReceipt.findUnique({
       where: { id: grId },
       include: { lines: true, purchaseOrder: true },
     });
@@ -113,7 +121,7 @@ export class GoodsReceiptService {
     if (gr.lines.length === 0)
       throw new BadRequestException('Cannot finalize an empty GR');
 
-    const finalized = await this.prisma.goodsReceipt.update({
+    const finalized = await db.goodsReceipt.update({
       where: { id: grId },
       data: {
         status: GoodsReceiptStatus.RECEIVED,
@@ -122,44 +130,8 @@ export class GoodsReceiptService {
       },
     });
 
-    await this.updatePOStatus(gr.purchaseOrderId);
+    await this.purchaseOrderService.recomputeStatus(gr.purchaseOrderId, db);
 
     return finalized;
-  }
-
-  private async updatePOStatus(poId: string) {
-    const poItems = await this.prisma.purchaseOrderItem.findMany({
-      where: { purchaseOrderId: poId },
-    });
-
-    if (poItems.length === 0) return;
-
-    const received = await this.prisma.goodsReceiptLine.groupBy({
-      by: ['purchaseOrderItemId'],
-      where: { purchaseOrderItem: { purchaseOrderId: poId } },
-      _sum: { quantity: true },
-    });
-
-    let anyReceived = false;
-    let fullyReceived = true;
-
-    for (const item of poItems) {
-      const rec = received.find((r) => r.purchaseOrderItemId === item.id);
-      const recQty = rec?._sum?.quantity ?? 0;
-
-      if (recQty > 0) anyReceived = true;
-      if (recQty < item.quantity) fullyReceived = false;
-    }
-
-    const newStatus = fullyReceived
-      ? OrderStatus.RECEIVED
-      : anyReceived
-        ? OrderStatus.PARTIALLY_RECEIVED
-        : OrderStatus.PENDING;
-
-    await this.prisma.purchaseOrder.update({
-      where: { id: poId },
-      data: { status: newStatus },
-    });
   }
 }

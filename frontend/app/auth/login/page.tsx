@@ -4,9 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Input from "@/components/ui/input";
 import Button from "@/components/ui/button";
+import { API_BASE_URL, TOKEN_KEY } from "@/lib/config";
 import { Mail, Lock } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,7 +20,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -30,10 +29,7 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
 
-      localStorage.setItem("access_token", data.accessToken);
-
-      const payload = JSON.parse(atob(data.accessToken.split(".")[1]));
-      localStorage.setItem("access_token_payload", JSON.stringify(payload));
+      localStorage.setItem(TOKEN_KEY, data.accessToken);
 
       router.push("/");
     } catch (err: any) {

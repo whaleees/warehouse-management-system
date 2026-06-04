@@ -1,5 +1,7 @@
+export type BadgeColor = "default" | "success" | "warning" | "danger";
+
 export interface Product {
-  id: number;
+  id: string;
   name: string;
   sku: string;
   category: string;
@@ -7,4 +9,7 @@ export interface Product {
   uom: string;
   imagePath?: string;
   lowStockThreshold: number;
+  isDeleted?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }

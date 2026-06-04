@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getUser } from "@/lib/auth";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -36,15 +37,12 @@ export default function Sidebar() {
   const [userInfo, setUserInfo] = useState<{ email?: string; role?: string }>({});
 
   useEffect(() => {
-    const raw = localStorage.getItem("access_token_payload");
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        setUserInfo({
-          email: parsed.email ?? "unknown",
-          role: parsed.role ?? "USER",
-        });
-      } catch {}
+    const user = getUser<{ email?: string; role?: string }>();
+    if (user) {
+      setUserInfo({
+        email: user.email ?? "unknown",
+        role: user.role ?? "USER",
+      });
     }
   }, []);
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { api, upload } from "@/lib/api";
+import { api, upload, ApiError } from "@/lib/api";
 
 export default function CreateSupplierPage() {
   const router = useRouter();
@@ -77,7 +77,7 @@ export default function CreateSupplierPage() {
       router.push("/suppliers");
     } catch (err) {
       console.error("Create supplier failed:", err);
-      alert("Failed to create supplier");
+      alert(err instanceof ApiError ? err.message : "Failed to create supplier");
     }
   }
 
