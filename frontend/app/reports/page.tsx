@@ -4,66 +4,76 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Link from "next/link";
 import {
   BarChart2,
-  TrendingUp,
+  Clock,
   Layers,
   AlertTriangle,
+  ChevronRight,
 } from "lucide-react";
 
 export default function ReportsIndexPage() {
   const items = [
     {
-      title: "Low Stock Report",
-      desc: "View items below threshold & stock discrepancies.",
+      title: "Low stock",
+      desc: "Products that have dropped below their reorder threshold.",
       href: "/reports/low-stock",
-      icon: <AlertTriangle className="text-red-400" size={22} />,
+      icon: <AlertTriangle size={22} className="text-[var(--danger)]" />,
     },
     {
-      title: "Expiry Report",
-      desc: "Track batches nearing expiry & manage freshness.",
+      title: "Expiring soon",
+      desc: "Batches nearing their expiry date so you can act on freshness.",
       href: "/reports/expiry",
-      icon: <TrendingUp className="text-purple-400" size={22} />,
+      icon: <Clock size={22} className="text-[var(--warning)]" />,
     },
     {
-      title: "Batch / Location Report",
-      desc: "See all batches and their distribution across locations.",
+      title: "Batches & locations",
+      desc: "Every batch and where it is stored across the warehouse.",
       href: "/reports/batches",
-      icon: <Layers className="text-blue-400" size={22} />,
+      icon: <Layers size={22} className="text-[var(--primary)]" />,
     },
     {
-      title: "Stock Movement Report",
-      desc: "Analyze warehouse movement trends and activity.",
+      title: "Stock movement",
+      desc: "Trends and activity for stock moving in and out.",
       href: "/reports/stock-movement",
-      icon: <BarChart2 className="text-teal-400" size={22} />,
+      icon: <BarChart2 size={22} className="text-[var(--success)]" />,
     },
   ];
 
   return (
     <DashboardShell>
-      <h1 className="text-lg font-mono tracking-widest text-white/90 mb-6">
-        REPORTS CENTER
-      </h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+          Reports
+        </h1>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Choose a report to review your warehouse.
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {items.map((item, i) => (
-          <Link key={i} href={item.href}>
-            <div
-              className="
-                bg-[#111215] border border-[#1e1f22]
-                rounded-xl p-6 shadow-lg cursor-pointer
-                transition-all hover:shadow-xl hover:bg-[#15161a]
-              "
-            >
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm font-mono tracking-widest text-gray-300">
-                  {item.title.toUpperCase()}
-                </p>
-                {item.icon}
-              </div>
-
-              <p className="text-xs text-gray-500 font-mono leading-relaxed">
-                {item.desc}
+          <Link
+            key={i}
+            href={item.href}
+            className="group flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm transition-colors hover:bg-[var(--bg-hover)]"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-base font-semibold text-[var(--card-foreground)]">
+                {item.title}
               </p>
+              {item.icon}
             </div>
+
+            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+              {item.desc}
+            </p>
+
+            <span className="inline-flex items-center gap-1 text-sm font-medium text-[var(--primary)]">
+              View report
+              <ChevronRight
+                size={16}
+                className="transition-transform group-hover:translate-x-0.5"
+              />
+            </span>
           </Link>
         ))}
       </div>

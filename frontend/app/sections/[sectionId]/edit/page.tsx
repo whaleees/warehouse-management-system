@@ -5,16 +5,21 @@ import { useRouter, useParams } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
+import LoadingState from "@/components/ui/loading-state";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import { ArrowLeft } from "lucide-react";
 
 export default function EditSectionPage() {
   const router = useRouter();
   const params = useParams();
   const sectionId = params?.sectionId as string;
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [codeError, setCodeError] = useState<string | undefined>();
 
   const [form, setForm] = useState({
     code: "",
@@ -42,6 +47,11 @@ export default function EditSectionPage() {
   }
 
   async function save() {
+    if (!form.code.trim()) {
+      setCodeError("Enter a section code.");
+      return;
+    }
+
     setSaving(true);
     try {
       await api(`/sections/${sectionId}`, {
@@ -51,92 +61,83 @@ export default function EditSectionPage() {
           description: form.description || null,
         }),
       });
+      toast.success("Section updated.");
       router.push(`/sections/${sectionId}`);
     } catch (err) {
       console.error("Save section failed:", err);
+      toast.error("Couldn't save your changes. Try again.");
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-sm text-gray-500 font-mono tracking-widest">
-          LOADING SECTION...
-        </p>
+        <LoadingState message="Loading section…" />
       </DashboardShell>
     );
   }
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
-
-        {/* HEADER */}
+      <div className="space-y-8">
+        {/* Header */}
         <div className="flex items-center gap-3">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => router.push(`/sections/${sectionId}`)}
-            className="p-2 hover:bg-[#1a1b1f] rounded-lg transition"
+            aria-label="Back to section"
           >
-            <ArrowLeft size={20} />
-          </button>
-          <h1 className="text-xl font-mono tracking-widest">EDIT SECTION</h1>
+            <ArrowLeft size={18} />
+          </Button>
+          <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+            Edit section
+          </h1>
         </div>
 
-        {/* FORM CARD */}
-        <Card className="p-6 bg-[#111217] border border-[#1c1d22] rounded-xl">
+        {/* Form card */}
+        <Card className="max-w-xl">
+          <div className="space-y-6">
+            <Input
+              label="Code"
+              value={form.code}
+              onChange={(e) => {
+                updateField("code", e.target.value);
+                if (codeError) setCodeError(undefined);
+              }}
+              error={codeError}
+            />
 
-          <div className="space-y-6 font-mono tracking-wider">
-
-            {/* CODE FIELD */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] tracking-widest text-gray-400">
-                CODE
-              </label>
-              <input
-                className="
-                  bg-[#0e0f12] px-3 py-2 rounded-lg
-                  border border-[#2a2c32]
-                  text-sm text-white outline-none
-                "
-                value={form.code}
-                onChange={(e) => updateField("code", e.target.value)}
-              />
-            </div>
-
-            {/* DESCRIPTION FIELD */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] tracking-widest text-gray-400">
-                DESCRIPTION
+            <div className="w-full space-y-1.5">
+              <label
+                htmlFor="section-description"
+                className="block text-sm font-medium text-[var(--foreground)]"
+              >
+                Description
               </label>
               <textarea
+                id="section-description"
                 rows={3}
-                className="
-                  bg-[#0e0f12] px-3 py-2 rounded-lg
-                  border border-[#2a2c32]
-                  text-sm text-white outline-none
-                "
+                className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] transition-colors focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 value={form.description}
                 onChange={(e) => updateField("description", e.target.value)}
               />
             </div>
           </div>
 
-          {/* SAVE */}
-          <div className="flex justify-end mt-6">
-            <button
-              onClick={save}
-              disabled={saving}
-              className="
-                px-4 py-2 rounded-lg bg-white text-black
-                font-mono text-xs tracking-widest font-semibold
-                hover:bg-gray-200 transition
-              "
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push(`/sections/${sectionId}`)}
             >
-              {saving ? "SAVING..." : "SAVE CHANGES"}
-            </button>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={save} loading={saving}>
+              Save changes
+            </Button>
           </div>
-
         </Card>
       </div>
     </DashboardShell>

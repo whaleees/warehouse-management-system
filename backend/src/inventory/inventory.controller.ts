@@ -22,7 +22,7 @@ export class InventoryController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   update(@Param('id') id: string, @Body() dto: UpdateInventoryDto) {
     return this.service.update(id, dto);
   }

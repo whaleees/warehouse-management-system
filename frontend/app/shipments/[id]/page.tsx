@@ -5,9 +5,15 @@ import { useParams, useRouter } from "next/navigation";
 
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
-import Badge from "@/components/ui/badge";
+import Button from "@/components/ui/button";
+import StatusBadge from "@/components/ui/status-badge";
+import Input from "@/components/ui/input";
+import LoadingState from "@/components/ui/loading-state";
+import ErrorState from "@/components/ui/error-state";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { api } from "@/lib/api";
-import { shipmentStatusColor } from "@/lib/status";
+import { useRole } from "@/lib/roles";
 
 import {
   ArrowLeft,
@@ -15,6 +21,7 @@ import {
   CheckCircle2,
   XCircle,
   Plus,
+  MapPin,
 } from "lucide-react";
 
 interface SalesOrderItem {
@@ -27,6 +34,7 @@ interface SalesOrderItem {
 interface Section {
   id: string;
   code: string;
+  description?: string;
 }
 
 interface Location {
@@ -35,15 +43,16 @@ interface Location {
   type: string;
 }
 
-
 export default function ShipmentDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { can } = useRole();
 
   const [shipment, setShipment] = useState<any>(null);
   const [salesOrder, setSalesOrder] = useState<any>(null);
   const [items, setItems] = useState<SalesOrderItem[]>([]);
-  const [acting, setActing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [sections, setSections] = useState<Section[]>([]);
@@ -53,6 +62,8 @@ export default function ShipmentDetailPage() {
 
   const [selectedItem, setSelectedItem] = useState("");
   const [qty, setQty] = useState(1);
+  const [addError, setAddError] = useState("");
+  const [adding, setAdding] = useState(false);
 
   // inventory rows to validate stock
   const [inventoryRows, setInventoryRows] = useState<any[]>([]);
@@ -122,14 +133,37 @@ export default function ShipmentDetailPage() {
   // HELPERS
   // ==========================
 
+  const selectedSoItem = items.find((it) => it.id === selectedItem);
+  const remainingForSelected = selectedSoItem
+    ? selectedSoItem.quantity - selectedSoItem.shippedQty
+    : 0;
+  const availableForSelected =
+    selectedSoItem && selectedLocation
+      ? getAvailableFor(selectedSoItem.product.id, selectedLocation)
+      : 0;
+  // Most you can add: limited by what's left on the order and stock on hand.
+  const maxQty =
+    selectedSoItem && selectedLocation
+      ? Math.max(0, Math.min(remainingForSelected, availableForSelected))
+      : remainingForSelected;
+
+  function clampQty(n: number) {
+    const cap = maxQty > 0 ? maxQty : 1;
+    if (!Number.isFinite(n)) return 1;
+    return Math.max(1, Math.min(Math.floor(n), cap));
+  }
+
   function handleSelectItem(value: string) {
     setSelectedItem(value); // item independent from section/location
+    setAddError("");
+    setQty(1);
   }
 
   async function handleSelectSection(sectionId: string) {
     setSelectedSection(sectionId);
     setSelectedLocation("");
     setLocations([]);
+    setAddError("");
 
     if (sectionId) {
       await loadLocations(sectionId);
@@ -161,89 +195,147 @@ export default function ShipmentDetailPage() {
   // ==========================
 
   async function addLine() {
-    if (!selectedItem) return alert("Select an item.");
-    if (!selectedLocation) return alert("Select a location.");
-    if (qty <= 0) return alert("Quantity must be > 0");
+    setAddError("");
 
-    const soItem = items.find((it) => it.id === selectedItem);
-    if (!soItem) return alert("Invalid item.");
+    if (!selectedItem) {
+      setAddError("Choose an item to ship.");
+      return;
+    }
+    if (!selectedLocation) {
+      setAddError("Choose where the stock is coming from.");
+      return;
+    }
+
+    const soItem = selectedSoItem;
+    if (!soItem) {
+      setAddError("That item is no longer available. Pick another.");
+      return;
+    }
 
     const remaining = soItem.quantity - soItem.shippedQty;
-    if (qty > remaining) {
-      return alert(`Quantity exceeds remaining on sales order (${remaining}).`);
-    }
-
-    const productId = soItem.product.id;
-    const available = getAvailableFor(productId, selectedLocation);
+    const available = getAvailableFor(soItem.product.id, selectedLocation);
 
     if (available <= 0) {
-      return alert("This location has no stock for the selected item.");
+      setAddError("This location has no stock for the selected item.");
+      return;
     }
 
-    if (qty > available) {
-      return alert(
-        `Quantity exceeds available stock at this location (${available}).`
+    const amount = clampQty(qty);
+    if (amount <= 0) {
+      setAddError("Nothing left to add for this item.");
+      return;
+    }
+    if (amount > remaining) {
+      setAddError(`Only ${remaining} left to ship on this order.`);
+      return;
+    }
+    if (amount > available) {
+      setAddError(`Only ${available} in stock at this location.`);
+      return;
+    }
+
+    setAdding(true);
+    try {
+      await api(`/shipment/${id}/line`, {
+        method: "POST",
+        body: JSON.stringify({
+          salesOrderItemId: selectedItem,
+          quantity: amount,
+          fromLocationId: selectedLocation,
+        }),
+      });
+
+      await loadShipmentAndSo();
+      await loadInventory(); // refresh inventory after stock moves
+      setQty(1);
+      toast.success(`Added ${amount} ${soItem.product.name} to the shipment.`);
+    } catch {
+      toast.error(
+        "Couldn't add that item. Check the quantity and stock, then try again.",
       );
+    } finally {
+      setAdding(false);
     }
-
-    await api(`/shipment/${id}/line`, {
-      method: "POST",
-      body: JSON.stringify({
-        salesOrderItemId: selectedItem,
-        quantity: qty,
-        fromLocationId: selectedLocation,
-      }),
-    });
-
-    await loadShipmentAndSo();
-    await loadInventory(); // refresh inventory after stock moves
-    setQty(1);
   }
 
   async function ship() {
-    if (!confirm("Ship this shipment?")) return;
-    setActing(true);
-    try {
-      await api(`/shipment/${id}/ship`, { method: "POST" });
+    const ok = await confirm({
+      title: "Ship this order?",
+      description:
+        "Stock will leave the warehouse and the shipment moves to in transit. This can't be undone.",
+      confirmLabel: "Ship order",
+      onConfirm: async () => {
+        try {
+          await api(`/shipment/${id}/ship`, { method: "POST" });
+        } catch {
+          throw new Error("Couldn't ship the order. Please try again.");
+        }
+      },
+    });
+    if (ok) {
       await loadShipmentAndSo();
-    } catch {
-      alert("Failed to ship.");
+      toast.success("Shipment is on its way.");
     }
-    setActing(false);
   }
 
   async function deliver() {
-    if (!confirm("Mark shipment as delivered?")) return;
-    setActing(true);
-    try {
-      await api(`/shipment/${id}/deliver`, { method: "POST" });
+    const ok = await confirm({
+      title: "Mark as delivered?",
+      description:
+        "This records the order as received by the customer. This can't be undone.",
+      confirmLabel: "Mark delivered",
+      onConfirm: async () => {
+        try {
+          await api(`/shipment/${id}/deliver`, { method: "POST" });
+        } catch {
+          throw new Error("Couldn't update the shipment. Please try again.");
+        }
+      },
+    });
+    if (ok) {
       await loadShipmentAndSo();
-    } catch {
-      alert("Failed to deliver.");
+      toast.success("Shipment marked as delivered.");
     }
-    setActing(false);
   }
 
   async function cancel() {
-    if (!confirm("Cancel shipment?")) return;
-    setActing(true);
-    try {
-      await api(`/shipment/${id}/cancel`, { method: "POST" });
+    const ok = await confirm({
+      title: "Cancel this shipment?",
+      description:
+        "Any stock already picked is returned and the shipment is closed. This can't be undone.",
+      confirmLabel: "Cancel shipment",
+      tone: "danger",
+      onConfirm: async () => {
+        try {
+          await api(`/shipment/${id}/cancel`, { method: "POST" });
+        } catch {
+          throw new Error("Couldn't cancel the shipment. Please try again.");
+        }
+      },
+    });
+    if (ok) {
+      toast.success("Shipment cancelled.");
       router.push("/shipments");
-    } catch {
-      alert("Failed to cancel.");
     }
-    setActing(false);
   }
 
   if (loading) {
-    return <DashboardShell>Loading...</DashboardShell>;
+    return (
+      <DashboardShell>
+        <LoadingState message="Loading shipment…" />
+      </DashboardShell>
+    );
   }
 
   if (!shipment || !salesOrder) {
     return (
       <DashboardShell>
-        <p className="text-sm text-red-400">Shipment not found.</p>
+        <div className="space-y-4">
+          <ErrorState message="We couldn't find that shipment." />
+          <Button variant="outline" onClick={() => router.push("/shipments")}>
+            Back to shipments
+          </Button>
+        </div>
       </DashboardShell>
     );
   }
@@ -254,219 +346,215 @@ export default function ShipmentDetailPage() {
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
-        {/* HEADER */}
+      <div className="space-y-8">
+        {/* Header */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/shipments")}
-            className="p-2 hover:bg-[#1a1b1f] rounded-lg transition"
+            className="rounded-lg p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--foreground)]"
+            aria-label="Back to shipments"
           >
             <ArrowLeft size={20} />
           </button>
 
-          <div>
-            <h1 className="text-xl font-mono tracking-widest text-white">
+          <div className="flex-1">
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
               {shipment.shipmentNumber}
             </h1>
-            <p className="text-xs font-mono text-gray-500 tracking-widest">
-              SALES ORDER: {salesOrder.orderNumber}
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Sales order {salesOrder.orderNumber}
+              {salesOrder.customer?.name
+                ? ` · ${salesOrder.customer.name}`
+                : ""}
             </p>
           </div>
 
-          <Badge className="ml-3" color={shipmentStatusColor(shipment.status)}>
-            {shipment.status}
-          </Badge>
+          <StatusBadge kind="shipment" status={shipment.status} />
         </div>
 
-        {/* ACTION BUTTONS */}
-        <div className="flex gap-3 flex-wrap">
-          {isDraft && (
-            <button
-              onClick={ship}
-              disabled={acting}
-              className="
-                bg-white text-black px-4 py-2 rounded-lg font-mono 
-                text-xs tracking-widest font-semibold flex items-center gap-2
-                hover:bg-gray-200 transition disabled:opacity-50
-              "
-            >
-              <Truck size={14} /> SHIP
-            </button>
-          )}
+        {/* Action buttons */}
+        {(isDraft || isInTransit) && (
+          <div className="flex flex-wrap gap-3">
+            {isDraft && can("manage:business") && (
+              <Button onClick={ship}>
+                <Truck size={16} />
+                Ship order
+              </Button>
+            )}
 
-          {isInTransit && (
-            <button
-              onClick={deliver}
-              disabled={acting}
-              className="
-                bg-white text-black px-4 py-2 rounded-lg font-mono 
-                text-xs tracking-widest font-semibold flex items-center gap-2
-                hover:bg-gray-200 transition disabled:opacity-50
-              "
-            >
-              <CheckCircle2 size={14} /> DELIVER
-            </button>
-          )}
+            {isInTransit && can("manage:business") && (
+              <Button variant="success" onClick={deliver}>
+                <CheckCircle2 size={16} />
+                Mark delivered
+              </Button>
+            )}
 
-          {(isDraft || isInTransit) && (
-            <button
-              onClick={cancel}
-              disabled={acting}
-              className="
-                bg-red-500 text-white px-4 py-2 rounded-lg font-mono 
-                text-xs tracking-widest font-semibold flex items-center gap-2
-                hover:bg-red-600 transition disabled:opacity-50
-              "
-            >
-              <XCircle size={14} /> CANCEL
-            </button>
-          )}
-        </div>
+            {can("manage:business") && (
+              <Button variant="danger" onClick={cancel}>
+                <XCircle size={16} />
+                Cancel shipment
+              </Button>
+            )}
+          </div>
+        )}
 
-        {/* ADD LINE (DRAFT ONLY) */}
+        {/* Add line (draft only) */}
         {isDraft && (
-          <Card className="p-6 bg-[#0e0f12] border border-[#1c1d22] rounded-xl space-y-6">
-            <h2 className="text-sm font-mono tracking-wide text-white">
-              ADD SHIPMENT LINE
-            </h2>
+          <Card className="space-y-5">
+            <div>
+              <h2 className="text-base font-semibold text-[var(--card-foreground)]">
+                Add items to ship
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Pick the product, where it's stored, and how many you're
+                sending.
+              </p>
+            </div>
 
-            {/* ITEM */}
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400 font-mono tracking-wide">
-                ITEM
+            {/* Item */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="ship-item"
+                className="text-sm font-medium text-[var(--foreground)]"
+              >
+                Item
               </label>
               <select
+                id="ship-item"
                 value={selectedItem}
                 onChange={(e) => handleSelectItem(e.target.value)}
-                className="
-                  w-full bg-[#111217] border border-[#23252e]
-                  px-3 py-2 rounded-lg text-sm font-mono tracking-wide
-                "
+                className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] transition-colors focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               >
-                <option value="">-- Select Item --</option>
+                <option value="">Choose an item</option>
                 {items.map((it) => {
                   const remaining = it.quantity - it.shippedQty;
                   if (remaining <= 0) return null;
                   return (
                     <option key={it.id} value={it.id}>
-                      {it.product.name} (remain {remaining})
+                      {it.product.name} ({remaining} left to ship)
                     </option>
                   );
                 })}
               </select>
             </div>
 
-            {/* SECTION & LOCATION */}
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 font-mono tracking-wide">
-                  SECTION
+            {/* Section & location */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="ship-section"
+                  className="text-sm font-medium text-[var(--foreground)]"
+                >
+                  Section
                 </label>
                 <select
+                  id="ship-section"
                   value={selectedSection}
                   onChange={(e) => handleSelectSection(e.target.value)}
-                  className="
-                    w-full bg-[#111217] border border-[#23252e]
-                    px-3 py-2 rounded-lg text-sm font-mono tracking-wide
-                  "
+                  className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] transition-colors focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                 >
-                  <option value="">Select Section</option>
+                  <option value="">Choose a section</option>
                   {sections.map((sec) => (
                     <option key={sec.id} value={sec.id}>
                       {sec.code}
+                      {sec.description ? ` — ${sec.description}` : ""}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 font-mono tracking-wide">
-                  LOCATION
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="ship-location"
+                  className="text-sm font-medium text-[var(--foreground)]"
+                >
+                  Location
                 </label>
                 <select
+                  id="ship-location"
                   value={selectedLocation}
-                  onChange={(e) => setSelectedLocation(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedLocation(e.target.value);
+                    setAddError("");
+                  }}
                   disabled={!selectedSection}
-                  className="
-                    w-full bg-[#111217] border border-[#23252e]
-                    px-3 py-2 rounded-lg text-sm font-mono tracking-wide
-                  "
+                  className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] transition-colors focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="">
                     {selectedSection
-                      ? "Select Location"
-                      : "Select section first"}
+                      ? "Choose a location"
+                      : "Choose a section first"}
                   </option>
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
-                      {loc.code} {loc.type ? `(${loc.type})` : ""}
+                      {loc.code}
+                      {loc.type ? ` — ${loc.type.toLowerCase()}` : ""}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
 
-            {/* QTY */}
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400 font-mono tracking-wide">
-                QUANTITY
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={qty}
-                onChange={(e) => setQty(Number(e.target.value))}
-                className="
-                  w-full bg-[#111217] border border-[#23252e]
-                  px-3 py-2 rounded-lg text-sm font-mono tracking-wide
-                "
-              />
-            </div>
+            {/* Quantity */}
+            <Input
+              type="number"
+              label="Quantity"
+              min={1}
+              max={maxQty > 0 ? maxQty : undefined}
+              value={qty}
+              onChange={(e) => setQty(clampQty(Number(e.target.value)))}
+              hint={
+                selectedItem && selectedLocation
+                  ? `Up to ${maxQty} (order has ${remainingForSelected} left, ${availableForSelected} in stock here).`
+                  : "Pick an item and location to see the limit."
+              }
+              error={addError || undefined}
+            />
 
-            {/* ADD BUTTON */}
-            <button
-              onClick={addLine}
-              className="
-                bg-white text-black px-4 py-2 rounded-lg 
-                font-mono text-xs tracking-widest font-semibold
-                flex items-center gap-2 hover:bg-gray-200 transition
-              "
-            >
-              <Plus size={14} /> ADD LINE
-            </button>
+            <div className="flex justify-end">
+              {can("manage:business") && (
+                <Button onClick={addLine} loading={adding}>
+                  <Plus size={16} />
+                  Add to shipment
+                </Button>
+              )}
+            </div>
           </Card>
         )}
 
-        {/* SHIPMENT LINES */}
-        <Card className="p-6 bg-[#0e0f12] border border-[#1c1d22] rounded-xl">
-          <h2 className="text-sm font-mono tracking-wide text-white mb-4">
-            SHIPMENT LINES
+        {/* Shipment lines */}
+        <Card className="space-y-4">
+          <h2 className="text-base font-semibold text-[var(--card-foreground)]">
+            Items in this shipment
           </h2>
 
           {shipment.lines.length === 0 ? (
-            <p className="text-xs text-gray-500 font-mono">
-              No shipment lines yet.
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {isDraft
+                ? "No items added yet. Use Add items to ship above to pick what's going out."
+                : "This shipment has no items."}
             </p>
           ) : (
             <div className="space-y-2">
               {shipment.lines.map((l: any) => (
                 <div
                   key={l.id}
-                  className="
-                    p-4 rounded-lg border border-[#23252e] bg-[#15171e]
-                    hover:bg-[#1c1d22] transition
-                  "
+                  className="rounded-lg border border-[var(--border)] bg-[var(--muted)] p-4"
                 >
-                  <p className="font-mono text-sm font-semibold">
+                  <p className="text-sm font-semibold text-[var(--foreground)]">
                     {l.product.name}
                   </p>
 
-                  <p className="text-xs text-gray-400 font-mono">
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                     Quantity: {l.quantity}
                   </p>
 
-                  <p className="text-xs text-gray-400 font-mono">
-                    From: {l.fromLocation.code} ({l.fromLocation.type})
+                  <p className="mt-0.5 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
+                    <MapPin size={14} />
+                    From {l.fromLocation.code}
+                    {l.fromLocation.type
+                      ? ` (${l.fromLocation.type.toLowerCase()})`
+                      : ""}
                   </p>
                 </div>
               ))}

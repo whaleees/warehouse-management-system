@@ -23,13 +23,13 @@ export class SalesOrderController {
   constructor(private readonly service: SalesOrderService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   create(@Body() dto: CreateSalesOrderDto) {
     return this.service.create(dto);
   }
 
   @Post(':id/item')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   addItem(@Param('id') id: string, @Body() dto: AddSOItemDto) {
     return this.service.addItem(id, dto);
   }
@@ -45,7 +45,7 @@ export class SalesOrderController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   update(@Param('id') id: string, @Body() dto: UpdateSalesOrderDto) {
     return this.service.update(id, dto);
   }
@@ -53,11 +53,11 @@ export class SalesOrderController {
   @Post(':id/approve')
   @Roles(UserRole.MANAGER)
   approve(@Param('id') id: string, @Req() req) {
-    return this.service.approve(id, req.user.id);
+    return this.service.approve(id, req.user.sub);
   }
 
   @Post(':id/cancel')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.MANAGER)
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
   }

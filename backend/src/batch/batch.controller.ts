@@ -22,7 +22,7 @@ export class BatchController {
   constructor(private readonly service: BatchService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   create(@Body() dto: CreateBatchDto) {
     return this.service.create(dto);
   }
@@ -38,13 +38,13 @@ export class BatchController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   update(@Param('id') id: string, @Body() dto: UpdateBatchDto) {
     return this.service.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.MANAGER)
   remove(@Param('id') id: string) {
     return this.service.softDelete(id);
   }

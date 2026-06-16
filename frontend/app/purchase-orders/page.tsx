@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import Badge from "@/components/ui/badge";
+import StatusBadge from "@/components/ui/status-badge";
 import { api } from "@/lib/api";
 import { formatDateOnly } from "@/lib/format";
-import { orderStatusColor } from "@/lib/status";
 import { useRouter } from "next/navigation";
+import { useRole } from "@/lib/roles";
 import {
   Plus,
   ArrowRight,
@@ -49,6 +49,7 @@ interface PurchaseOrder {
 
 export default function PurchaseOrdersPage() {
   const router = useRouter();
+  const { can } = useRole();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -69,50 +70,55 @@ export default function PurchaseOrdersPage() {
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
+      <div className="space-y-8">
 
         {/* HEADER */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-mono tracking-widest">PURCHASE ORDERS</h1>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+              Purchase orders
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Orders you send to suppliers to bring stock into the warehouse.
+            </p>
+          </div>
 
-          <button
-            onClick={() => router.push("/purchase-orders/create")}
-            className="
-              px-4 py-2 rounded-lg bg-white text-black
-              font-mono text-xs tracking-widest font-semibold
-              hover:bg-gray-200 transition flex items-center gap-2
-            "
-          >
-            <Plus size={14} /> NEW PURCHASE ORDER
-          </button>
+          {can("manage:business") && (
+            <Button
+              variant="primary"
+              onClick={() => router.push("/purchase-orders/create")}
+            >
+              <Plus size={16} /> New purchase order
+            </Button>
+          )}
         </div>
 
         {/* TABLE */}
-        <Card className="p-0 bg-[#111217] border border-[#1c1d22] overflow-hidden">
+        <Card className="p-0 overflow-hidden">
 
-          <table className="w-full text-sm font-mono tracking-wider">
-            <thead className="bg-[#0e0f12] text-gray-500">
+          <table className="w-full text-sm">
+            <thead className="bg-[var(--muted)] text-[var(--muted-foreground)]">
               <tr>
-                <th className="px-4 py-3 text-left text-[10px] tracking-widest">PO NUMBER</th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-widest">SUPPLIER</th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-widest">STATUS</th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-widest">DATES</th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-widest">ITEMS</th>
-                <th className="px-4 py-3 text-right text-[10px] tracking-widest">ACTION</th>
+                <th className="px-4 py-3 text-left text-xs font-medium">Order number</th>
+                <th className="px-4 py-3 text-left text-xs font-medium">Supplier</th>
+                <th className="px-4 py-3 text-left text-xs font-medium">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium">Dates</th>
+                <th className="px-4 py-3 text-left text-xs font-medium">Items</th>
+                <th className="px-4 py-3 text-right text-xs font-medium">Open</th>
               </tr>
             </thead>
 
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-gray-500 text-xs">
-                    LOADING PURCHASE ORDERS...
+                  <td colSpan={6} className="py-4 text-center text-[var(--muted-foreground)] text-sm">
+                    Loading purchase orders…
                   </td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-gray-500 text-xs">
-                    NO PURCHASE ORDERS FOUND.
+                  <td colSpan={6} className="py-4 text-center text-[var(--muted-foreground)] text-sm">
+                    No purchase orders yet. Create one with the New purchase order button above.
                   </td>
                 </tr>
               ) : (
@@ -127,27 +133,27 @@ export default function PurchaseOrdersPage() {
                     <tr
                       key={po.id}
                       className="
-                        border-t border-[#1c1d22]
-                        hover:bg-[#131419] transition cursor-pointer
+                        border-t border-[var(--border)]
+                        hover:bg-[var(--bg-hover)] transition cursor-pointer
                       "
                       onClick={() => router.push(`/purchase-orders/${po.id}`)}
                     >
                       {/* PO Number */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <FileText size={14} className="opacity-60" />
-                          <span className="font-semibold">{po.orderNumber}</span>
+                          <FileText size={14} className="text-[var(--muted-foreground)]" />
+                          <span className="font-semibold text-[var(--foreground)]">{po.orderNumber}</span>
                         </div>
                       </td>
 
                       {/* Supplier */}
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
-                          <span className="flex items-center gap-1">
-                            <Building2 size={13} className="opacity-60" />
+                          <span className="flex items-center gap-1 text-[var(--foreground)]">
+                            <Building2 size={13} className="text-[var(--muted-foreground)]" />
                             {po.supplier?.name}
                           </span>
-                          <span className="text-[11px] text-gray-500">
+                          <span className="text-xs text-[var(--muted-foreground)]">
                             {po.supplier?.code}
                           </span>
                         </div>
@@ -155,20 +161,18 @@ export default function PurchaseOrdersPage() {
 
                       {/* Status */}
                       <td className="px-4 py-3">
-                        <Badge color={orderStatusColor(po.status)}>
-                          {po.status}
-                        </Badge>
+                        <StatusBadge kind="order" status={po.status} />
                       </td>
 
                       {/* Dates */}
                       <td className="px-4 py-3">
                         <div className="flex flex-col text-xs">
-                          <span className="flex items-center gap-1 text-gray-500">
-                            <Clock3 size={11} /> ORDER:{" "}
-                            <span className="text-white">{formatDateOnly(po.orderDate)}</span>
+                          <span className="flex items-center gap-1 text-[var(--muted-foreground)]">
+                            <Clock3 size={11} /> Ordered:{" "}
+                            <span className="text-[var(--foreground)]">{formatDateOnly(po.orderDate)}</span>
                           </span>
-                          <span className="text-gray-500">
-                            ETA: <span className="text-white">{formatDateOnly(po.expectedDate)}</span>
+                          <span className="text-[var(--muted-foreground)]">
+                            Expected: <span className="text-[var(--foreground)]">{formatDateOnly(po.expectedDate)}</span>
                           </span>
                         </div>
                       </td>
@@ -176,15 +180,15 @@ export default function PurchaseOrdersPage() {
                       {/* Items */}
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
-                          <span className="font-semibold">{itemCount} line(s)</span>
-                          <span className="text-[11px] text-gray-500">
+                          <span className="font-semibold text-[var(--foreground)]">{itemCount} line(s)</span>
+                          <span className="text-xs text-[var(--muted-foreground)]">
                             Total qty: {totalQty}
                           </span>
                         </div>
                       </td>
 
                       <td className="px-4 py-3 text-right">
-                        <ArrowRight size={16} className="opacity-60" />
+                        <ArrowRight size={16} className="inline text-[var(--muted-foreground)]" />
                       </td>
                     </tr>
                   );

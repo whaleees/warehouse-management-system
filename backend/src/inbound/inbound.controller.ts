@@ -22,35 +22,35 @@ export class InboundController {
   constructor(private readonly inbound: InboundService) {}
 
   @Post('start')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.STAFF)
   start(@Body() dto: StartInboundDto, @Req() req) {
-    return this.inbound.startInbound(dto.purchaseOrderId, req.user.id);
+    return this.inbound.startInbound(dto.purchaseOrderId, req.user.sub);
   }
 
   @Post(':grId/line')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.STAFF)
   addLine(@Param('grId') grId: string, @Body() dto: AddInboundLineDto) {
     return this.inbound.addLine(grId, dto);
   }
 
   @Post(':grId/finalize')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   finalize(
     @Param('grId') grId: string,
     @Body() dto: FinalizeInboundDto,
     @Req() req,
   ) {
-    return this.inbound.finalize(grId, dto.autoPostStock, req.user.id);
+    return this.inbound.finalize(grId, dto.autoPostStock, req.user.sub);
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STAFF)
+  @Roles(UserRole.VIEWER)
   findAll() {
     return this.inbound.findAll();
   }
 
   @Get(':grId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.MANAGER)
+  @Roles(UserRole.VIEWER)
   getOne(@Param('grId') grId: string) {
     return this.inbound.getOne(grId);
   }

@@ -11,6 +11,8 @@ import {
   User,
   Users2,
   Building2,
+  PackageCheck,
+  Send,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -18,18 +20,48 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getUser } from "@/lib/auth";
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/products", label: "Products", icon: Boxes },
-  { href: "/suppliers", label: "Suppliers", icon: Truck },
-  { href: "/customers", label: "Customers", icon: Users2 },
-  { href: "/inventory", label: "Inventory", icon: PackageSearch },
-  { href: "/sections", label: "Sections", icon: Building2 },
-  { href: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
-  { href: "/inbound", label: "Inbound", icon: Truck },
-  { href: "/sales-orders", label: "Sales Orders", icon: ShoppingCart },
-  { href: "/shipments", label: "Shipments", icon: Truck },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
+type NavGroup = { heading: string | null; items: NavItem[] };
+
+// Task-based clusters instead of one flat list of 11 (see DESIGN.md).
+const navGroups: NavGroup[] = [
+  {
+    heading: null,
+    items: [{ href: "/", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    heading: "Receiving",
+    items: [
+      { href: "/purchase-orders", label: "Purchase orders", icon: ClipboardList },
+      { href: "/inbound", label: "Goods receipts", icon: PackageCheck },
+    ],
+  },
+  {
+    heading: "Shipping",
+    items: [
+      { href: "/sales-orders", label: "Sales orders", icon: ShoppingCart },
+      { href: "/shipments", label: "Shipments", icon: Send },
+    ],
+  },
+  {
+    heading: "Stock",
+    items: [
+      { href: "/inventory", label: "Inventory", icon: PackageSearch },
+      { href: "/sections", label: "Sections", icon: Building2 },
+    ],
+  },
+  {
+    heading: "Master data",
+    items: [
+      { href: "/products", label: "Products", icon: Boxes },
+      { href: "/suppliers", label: "Suppliers", icon: Truck },
+      { href: "/customers", label: "Customers", icon: Users2 },
+    ],
+  },
+  {
+    heading: "Reports",
+    items: [{ href: "/reports", label: "Reports", icon: BarChart3 }],
+  },
 ];
 
 export default function Sidebar() {
@@ -46,96 +78,73 @@ export default function Sidebar() {
     }
   }, []);
 
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
+
   return (
-    <aside
-      className="
-        flex flex-col justify-between
-        h-screen w-60
-        bg-[#0b0c0f] border-r border-[#1e1f22]
-        px-4 py-6
-      "
-    >
-
-      {/* TOP SECTION */}
-      <div className="space-y-8">
-
-        {/* LOGO */}
-        <div className="flex items-center gap-3 px-1">
+    <aside className="flex h-screen w-64 flex-col justify-between border-r border-[var(--border)] bg-[var(--card)] px-3 py-5">
+      <div className="space-y-6 overflow-y-auto">
+        {/* Brand */}
+        <div className="flex items-center gap-3 px-2">
           <div
-            className="
-              w-9 h-9 rounded-lg bg-white/10
-              flex items-center justify-center
-              text-white font-mono text-sm tracking-wide
-              border border-white/10
-            "
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-bold text-white shadow-[0_4px_10px_rgba(37,99,235,0.35)]"
+            style={{ background: "var(--brand-grad)" }}
           >
-            XS
+            xS
           </div>
-
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-mono tracking-widest text-white">
-              XSTOCK
+            <span className="text-base font-semibold text-[var(--foreground)]">
+              xStock
             </span>
-            <span className="text-[10px] text-gray-500 tracking-wide font-mono">
-              WAREHOUSE CONSOLE
+            <span className="text-xs text-[var(--muted-foreground)]">
+              Warehouse
             </span>
           </div>
         </div>
 
-        {/* NAVIGATION */}
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`
-                  flex items-center gap-3 px-3 py-2 rounded-md font-mono text-xs tracking-widest
-                  transition-all border border-transparent
-                  ${
-                    active
-                      ? "bg-white/5 text-white border-white/20"
-                      : "text-gray-500 hover:text-white hover:bg-white/5"
-                  }
-                `}
-              >
-                <Icon size={16} className="opacity-80" />
-                <span>{item.label.toUpperCase()}</span>
-              </Link>
-            );
-          })}
+        {/* Grouped navigation */}
+        <nav className="space-y-5">
+          {navGroups.map((group, gi) => (
+            <div key={gi} className="space-y-1">
+              {group.heading && (
+                <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                  {group.heading}
+                </p>
+              )}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                      active
+                        ? "bg-[var(--accent)] font-semibold text-[var(--accent-foreground)]"
+                        : "font-medium text-[var(--muted-foreground)] hover:bg-[var(--bg-hover)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </div>
 
-      {/* USER SECTION */}
-      <div className="px-2">
-        <div
-          className="
-            flex items-center gap-3
-            bg-[#111215] border border-[#1e1f22] rounded-lg
-            px-3 py-3
-          "
-        >
-          <div
-            className="
-              w-9 h-9 rounded-full bg-[#0d0e10]
-              flex items-center justify-center border border-[#1e1f22]
-            "
-          >
-            <User size={16} className="text-gray-500" />
+      {/* User */}
+      <div className="pt-3">
+        <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--card)] border border-[var(--border)]">
+            <User size={16} className="text-[var(--muted-foreground)]" />
           </div>
-
-          <div className="flex flex-col leading-tight">
-            <span className="text-xs text-white font-mono tracking-wide">
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-sm font-medium text-[var(--foreground)]">
               {userInfo.email}
             </span>
-            <span className="text-[10px] text-gray-500 font-mono tracking-widest">
+            <span className="text-xs text-[var(--muted-foreground)]">
               {userInfo.role}
             </span>
           </div>

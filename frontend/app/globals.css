@@ -1,25 +1,28 @@
-/* INTER FONT */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-
 /* Tailwind v4 core */
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Custom Dark Mode Variant */
+/* Dark mode is class-based: <html class="dark"> set by the theme provider */
 @custom-variant dark (&:is(.dark *));
 
 /* -------------------------------------------------------
-   THEME MAPPING – required for tailwind v4 tokens
+   THEME MAPPING – exposes CSS variables as Tailwind tokens
+   (bg-primary, text-muted-foreground, border-border, etc.)
 -------------------------------------------------------- */
 @theme inline {
-  --font-sans: "Inter", system-ui, sans-serif;
+  --font-sans: var(--font-inter), "Inter", system-ui, sans-serif;
 
-  /* Base tokens mapped to CSS variables */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--card-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
 
   --color-border: var(--border);
   --color-input: var(--input);
@@ -28,8 +31,23 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
 
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -38,117 +56,253 @@
 }
 
 /* -------------------------------------------------------
-   XSTOCK DARK THEME VARIABLES
+   LIGHT THEME (default :root)
+   Conventional, POS/banking-app palette. Blue primary;
+   green/amber/red reserved strictly for status meaning.
 -------------------------------------------------------- */
-
 :root {
-  --background: #050608;
-  --foreground: #f5f5f5;
+  --background: #f5f7fa;
+  --foreground: #0f172a;
 
-  --card: #0b0c11;
-  --card-foreground: #f5f5f5;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
 
-  --border: #23252d;
-  --input: #111217;
-  --ring: #24c98b;
+  --muted: #f1f5f9;
+  --muted-foreground: #5a6675;
 
-  --primary: #24c98b;
-  --primary-foreground: #0c0f0c;
+  --border: #e2e8f0;
+  --border-subtle: #eef1f6;
+  --input: #ffffff;
+  --ring: #2563eb;
 
-  --accent: rgba(36, 201, 139, 0.12);
-  --accent-foreground: #24c98b;
+  /* Primary = conventional blue */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-foreground: #ffffff;
+
+  --secondary: #ffffff;
+  --secondary-foreground: #1e293b;
+
+  --accent: #eff6ff;
+  --accent-foreground: #1d4ed8;
+
+  /* Hover surface for ghost/list rows */
+  --bg-hover: #f1f5f9;
+
+  /* Status — green = good, amber = pending, red = problem */
+  --success: #16a34a;
+  --success-foreground: #ffffff;
+  --success-bg: #dcfce7;
+  --success-border: #86efac;
+  --success-text: #15803d;
+
+  --warning: #d97706;
+  --warning-foreground: #ffffff;
+  --warning-bg: #fef3c7;
+  --warning-border: #fcd34d;
+  --warning-text: #b45309;
+
+  --danger: #dc2626;
+  --danger-foreground: #ffffff;
+  --danger-bg: #fee2e2;
+  --danger-border: #fca5a5;
+  --danger-text: #b91c1c;
 
   --destructive: #dc2626;
-  --destructive-border: #7f1d1d;
-  --destructive-foreground: #fca5a5;
+  --destructive-border: #fca5a5;
+  --destructive-foreground: #ffffff;
+
+  /* Convenience alias used by older components */
+  --text: var(--foreground);
+  --text-muted: var(--muted-foreground);
 
   --radius: 0.5rem;
+
+  /* Layered soft shadows — the main "premium" lever. Warm, low-spread. */
+  --shadow-card: 0 1px 2px rgba(15, 23, 41, 0.04), 0 4px 12px rgba(15, 23, 41, 0.05);
+  --shadow-hover: 0 2px 4px rgba(15, 23, 41, 0.05), 0 12px 28px rgba(15, 23, 41, 0.1);
+
+  /* Brand mark gradient (sidebar logo, avatars) */
+  --brand-grad: linear-gradient(135deg, #3b82f6, #2563eb);
 }
 
 /* -------------------------------------------------------
-   DARK MODE OVERRIDES (if .dark class is applied)
+   DARK THEME (.dark)
+   Calm dark slate — NOT neon-on-black, no glow. Brighter
+   blue primary for contrast; status colors dark-tuned.
 -------------------------------------------------------- */
 .dark {
-  --background: #050608;
-  --foreground: #f5f5f5;
+  --background: #0b0e14;
+  --foreground: #e8eaed;
 
-  --card: #0c0d12;
-  --card-foreground: #fafafa;
+  --card: #151a23;
+  --card-foreground: #f1f5f9;
 
-  --border: #2c2f38;
-  --input: #121318;
+  --muted: #1c222d;
+  --muted-foreground: #9aa6b6;
 
-  --primary: #24c98b;
-  --primary-foreground: #000;
+  --border: #2a3140;
+  --border-subtle: #222936;
+  --input: #1a2029;
+  --ring: #3b82f6;
 
-  --accent: rgba(36, 201, 139, 0.12);
-  --accent-foreground: #24c98b;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1c222d;
+  --secondary-foreground: #e8eaed;
+
+  --accent: rgba(59, 130, 246, 0.16);
+  --accent-foreground: #93c5fd;
+
+  --bg-hover: rgba(255, 255, 255, 0.05);
+
+  --success: #22c55e;
+  --success-foreground: #052e16;
+  --success-bg: rgba(34, 197, 94, 0.14);
+  --success-border: rgba(34, 197, 94, 0.42);
+  --success-text: #4ade80;
+
+  --warning: #f59e0b;
+  --warning-foreground: #1f1300;
+  --warning-bg: rgba(245, 158, 11, 0.14);
+  --warning-border: rgba(245, 158, 11, 0.42);
+  --warning-text: #fbbf24;
+
+  --danger: #ef4444;
+  --danger-foreground: #ffffff;
+  --danger-bg: rgba(239, 68, 68, 0.14);
+  --danger-border: rgba(239, 68, 68, 0.42);
+  --danger-text: #f87171;
+
+  --destructive: #ef4444;
+  --destructive-border: rgba(239, 68, 68, 0.42);
+  --destructive-foreground: #ffffff;
+
+  --text: var(--foreground);
+  --text-muted: var(--muted-foreground);
+
+  /* Deeper shadows for dark surfaces (no glow — just depth). */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 14px 30px rgba(0, 0, 0, 0.5);
 }
 
 /* -------------------------------------------------------
-   BASE LAYER (applies Tailwind utilities to HTML)
+   BASE LAYER
 -------------------------------------------------------- */
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--border);
+  }
+
+  html {
+    scrollbar-gutter: stable;
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
-    background: radial-gradient(circle at top, #141721 0, #050608 55%);
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 }
 
 /* -------------------------------------------------------
-   STATUS BANNERS (error/success/info)
+   STATUS BANNERS (error / success / info)
+   Theme-aware via tokens.
 -------------------------------------------------------- */
-
 @layer components {
   .banner-base {
-    @apply rounded-md border p-2 text-xs font-medium;
+    @apply rounded-md border p-3 text-sm font-medium;
   }
 
   .banner-error {
-    border-color: var(--destructive-border);
-    background-color: color-mix(in srgb, var(--destructive) 10%, transparent);
-    color: var(--destructive-foreground);
+    border-color: var(--danger-border);
+    background-color: var(--danger-bg);
+    color: var(--danger-text);
   }
 
   .banner-success {
-    border-color: #14532d;
-    background-color: rgba(34, 197, 94, 0.12);
-    color: #4ade80;
+    border-color: var(--success-border);
+    background-color: var(--success-bg);
+    color: var(--success-text);
   }
 
   .banner-info {
-    border-color: #1e40af;
-    background-color: rgba(59, 130, 246, 0.12);
-    color: #93c5fd;
+    border-color: var(--primary);
+    background-color: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  /* Soft-tinted icon chip — used on stat cards, list rows, report cards.
+     Colors reuse the status tokens; blue is the neutral/brand default. */
+  .icon-chip {
+    @apply flex items-center justify-center rounded-xl;
+  }
+  .icon-chip-blue {
+    background-color: var(--accent);
+    color: var(--accent-foreground);
+  }
+  .icon-chip-green {
+    background-color: var(--success-bg);
+    color: var(--success-text);
+  }
+  .icon-chip-amber {
+    background-color: var(--warning-bg);
+    color: var(--warning-text);
+  }
+  .icon-chip-red {
+    background-color: var(--danger-bg);
+    color: var(--danger-text);
+  }
+
+  /* Card that lifts on hover (links / clickable cards). */
+  .card-hover {
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+  }
+  .card-hover:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+  }
+
+  /* Shared form-control styling — Inter, not mono, AA contrast. */
+  .input-style {
+    @apply w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors;
+    background-color: var(--input);
+    border: 1px solid var(--border);
+    color: var(--foreground);
+  }
+
+  .input-style::placeholder {
+    color: var(--muted-foreground);
+  }
+
+  .input-style:focus {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 35%, transparent);
+  }
+
+  .input-style:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 }
 
 /* -------------------------------------------------------
-   SMOOTH SCROLLBAR
+   SCROLLBAR
 -------------------------------------------------------- */
-
-html {
-  scrollbar-gutter: stable;
-}
-
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
   border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.input-style {
-  @apply w-full rounded-lg p-2.5 text-sm bg-[#0e0f13] border border-[#1c1d22] 
-         focus:border-white outline-none font-mono;
+  background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
 }

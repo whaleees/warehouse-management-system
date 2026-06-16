@@ -5,15 +5,20 @@ import { useRouter, useParams } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { api } from "@/lib/api";
+import Input from "@/components/ui/input";
+import LoadingState from "@/components/ui/loading-state";
+import { api, ApiError } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 
 export default function EditSupplierPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string }>({});
 
   const [form, setForm] = useState({
     code: "",
@@ -24,7 +29,7 @@ export default function EditSupplierPage() {
     address: "",
   });
 
-  /** Load Supplier */
+  /** Load supplier */
   useEffect(() => {
     async function loadSupplier() {
       try {
@@ -49,156 +54,116 @@ export default function EditSupplierPage() {
 
   function updateField(field: string, value: any) {
     setForm((prev) => ({ ...prev, [field]: value }));
+    if (field === "name" && value.trim()) {
+      setErrors((prev) => ({ ...prev, name: undefined }));
+    }
   }
 
-  /** Save Changes */
+  /** Save changes */
   async function saveSupplier() {
-    setSaving(true);
+    if (!form.name.trim()) {
+      setErrors({ name: "Enter a supplier name." });
+      return;
+    }
 
+    setSaving(true);
     try {
       await api(`/supplier/${id}`, {
         method: "PATCH",
         body: JSON.stringify(form),
       });
 
+      toast.success("Changes saved.");
       router.push("/suppliers");
     } catch (err) {
       console.error("Save failed:", err);
-      alert("Failed to save supplier.");
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't save your changes. Try again.",
+      );
+      setSaving(false);
     }
-
-    setSaving(false);
   }
 
   if (loading)
     return (
       <DashboardShell>
-        <p className="text-xs text-gray-500 font-mono tracking-wide">
-          Loading supplier...
-        </p>
+        <LoadingState message="Loading supplier…" />
       </DashboardShell>
     );
 
   return (
     <DashboardShell>
-      <h1 className="text-xl font-mono tracking-widest font-semibold mb-6">
-        EDIT SUPPLIER
-      </h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+          Edit supplier
+        </h1>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Update this vendor&apos;s contact details.
+        </p>
+      </div>
 
-      <Card
-        className="
-          p-8 bg-[#111217] border border-[#1c1d22] rounded-xl
-          shadow-lg
-        "
-      >
-        {/* FORM GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <Card className="p-8">
+        {/* Form grid */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
 
-          {/* CODE */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-mono tracking-widest text-gray-500">
-              CODE
-            </label>
-            <input
-              className="
-                w-full p-2 rounded-lg text-sm font-mono
-                bg-[#1a1c20] border border-[#2a2c32]
-                text-gray-400 cursor-not-allowed
-              "
-              value={form.code}
-              disabled
-            />
-          </div>
+          <Input
+            label="Code"
+            value={form.code}
+            disabled
+            hint="The code can't be changed."
+          />
 
-          {/* NAME */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-mono tracking-widest text-gray-500">
-              NAME
-            </label>
-            <input
-              className="
-                w-full p-2 rounded-lg text-sm font-mono
-                bg-[#0e0f13] border border-[#1c1d22] focus:border-white
-              "
-              value={form.name}
-              onChange={(e) => updateField("name", e.target.value)}
-            />
-          </div>
+          <Input
+            label="Name"
+            value={form.name}
+            onChange={(e) => updateField("name", e.target.value)}
+            error={errors.name}
+          />
 
-          {/* CONTACT */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-mono tracking-widest text-gray-500">
-              CONTACT PERSON
-            </label>
-            <input
-              className="
-                w-full p-2 rounded-lg text-sm font-mono
-                bg-[#0e0f13] border border-[#1c1d22]
-              "
-              value={form.contact}
-              onChange={(e) => updateField("contact", e.target.value)}
-            />
-          </div>
+          <Input
+            label="Contact person"
+            value={form.contact}
+            onChange={(e) => updateField("contact", e.target.value)}
+          />
 
-          {/* EMAIL */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-mono tracking-widest text-gray-500">
-              EMAIL
-            </label>
-            <input
-              type="email"
-              className="
-                w-full p-2 rounded-lg text-sm font-mono
-                bg-[#0e0f13] border border-[#1c1d22]
-              "
-              value={form.email}
-              onChange={(e) => updateField("email", e.target.value)}
-            />
-          </div>
+          <Input
+            label="Email"
+            type="email"
+            value={form.email}
+            onChange={(e) => updateField("email", e.target.value)}
+          />
 
-          {/* PHONE */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-mono tracking-widest text-gray-500">
-              PHONE
-            </label>
-            <input
-              className="
-                w-full p-2 rounded-lg text-sm font-mono
-                bg-[#0e0f13] border border-[#1c1d22]
-              "
-              value={form.phone}
-              onChange={(e) => updateField("phone", e.target.value)}
-            />
-          </div>
+          <Input
+            label="Phone"
+            value={form.phone}
+            onChange={(e) => updateField("phone", e.target.value)}
+          />
 
-          {/* ADDRESS */}
-          <div className="flex flex-col gap-2 md:col-span-2">
-            <label className="text-[10px] font-mono tracking-widest text-gray-500">
-              ADDRESS
+          <div className="flex flex-col gap-1.5 md:col-span-2">
+            <label className="block text-sm font-medium text-[var(--foreground)]">
+              Address
             </label>
             <textarea
-              className="
-                w-full p-2 rounded-lg text-sm font-mono h-24 resize-none
-                bg-[#0e0f13] border border-[#1c1d22]
-              "
+              className="input-style h-24 resize-none"
               value={form.address}
               onChange={(e) => updateField("address", e.target.value)}
             />
           </div>
         </div>
 
-        {/* SAVE BUTTON */}
-        <div className="mt-8 flex justify-end">
+        {/* Actions */}
+        <div className="mt-8 flex justify-end gap-3">
           <Button
-            onClick={saveSupplier}
+            variant="outline"
+            onClick={() => router.push("/suppliers")}
             disabled={saving}
-            className="
-              w-full md:w-auto py-2.5 rounded-lg
-              bg-white text-black font-mono tracking-widest font-semibold
-              hover:bg-gray-200 transition
-            "
           >
-            {saving ? "SAVING..." : "SAVE CHANGES"}
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={saveSupplier} loading={saving}>
+            Save changes
           </Button>
         </div>
       </Card>

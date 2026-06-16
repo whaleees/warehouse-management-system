@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
 import { api, upload, ApiError } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 
 export default function CreateCustomerPage() {
   const router = useRouter();
+  const toast = useToast();
 
   const [form, setForm] = useState({
     code: "",
@@ -19,28 +22,48 @@ export default function CreateCustomerPage() {
     address: "",
   });
 
+  type FieldErrors = Partial<Record<keyof typeof form, string>>;
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
 
   function updateField(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
+    setErrors((prev) => ({ ...prev, [field]: undefined }));
+  }
+
+  function validate(): FieldErrors {
+    const next: FieldErrors = {};
+    if (!form.code.trim()) next.code = "Enter a customer code.";
+    if (!form.name.trim()) next.name = "Enter a customer name.";
+    if (!form.contact.trim()) next.contact = "Enter a contact person.";
+    if (!form.phone.trim()) next.phone = "Enter a phone number.";
+    if (!form.address.trim()) next.address = "Enter an address.";
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
+      next.email = "Enter a valid email address.";
+    return next;
   }
 
   async function handleImageUpload(file: File) {
-    const formData = new FormData();
-    formData.append("image", file);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
 
-    const res = await upload("/upload", formData);
+      const res = await upload("/upload", formData);
 
-    if (!res?.imagePath) {
-      alert("Image upload failed");
-      return;
+      if (!res?.imagePath) {
+        toast.error("Couldn't upload the image. Try a different file.");
+        return;
+      }
+
+      setImagePath(res.imagePath);
+    } catch {
+      toast.error("Couldn't upload the image. Try again.");
     }
-
-    setImagePath(res.imagePath);
   }
 
-  function onImageChange(e: any) {
+  function onImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -48,61 +71,66 @@ export default function CreateCustomerPage() {
     handleImageUpload(file);
   }
 
-  async function handleSubmit(e: any) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!form.code || !form.name) {
-      alert("Customer code and name are required.");
+    const nextErrors = validate();
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
 
+    setSaving(true);
     try {
       await api("/customer", {
         method: "POST",
         body: JSON.stringify({
-          ...form,
+          code: form.code.trim(),
+          name: form.name.trim(),
+          contact: form.contact.trim(),
+          phone: form.phone.trim(),
+          address: form.address.trim(),
+          email: form.email.trim() || undefined,
           imagePath: imagePath ?? null,
         }),
       });
 
+      toast.success("Customer created.");
       router.push("/customers");
     } catch (err) {
-      console.error("Create customer failed:", err);
-      alert(err instanceof ApiError ? err.message : "Failed to create customer");
+      toast.error(
+        err instanceof ApiError && err.message
+          ? err.message
+          : "Couldn't create the customer. Check the details and try again.",
+      );
+      setSaving(false);
     }
   }
 
   return (
     <DashboardShell>
-      <h1 className="text-xl font-semibold mb-6 tracking-wide font-mono">
-        ADD CUSTOMER
+      <h1 className="text-2xl font-semibold mb-6 text-[var(--foreground)]">
+        Add customer
       </h1>
 
-      <Card className="p-8 space-y-8 bg-[#111217] border border-[#1c1d22] rounded-xl">
+      <Card className="p-8 space-y-8">
 
-        {/* IMAGE UPLOAD */}
-        <div className="w-full h-52 bg-[#0d0e10] rounded-xl flex items-center justify-center relative overflow-hidden">
+        {/* Image upload */}
+        <div className="w-full h-52 bg-[var(--muted)] rounded-xl flex items-center justify-center relative overflow-hidden">
           {imagePreview ? (
             <img
               src={imagePreview}
+              alt="Customer preview"
               className="w-full h-full object-cover rounded-xl"
             />
           ) : (
-            <span className="text-gray-500 text-xs font-mono tracking-wide">
-              NO IMAGE SELECTED
+            <span className="text-[var(--muted-foreground)] text-sm">
+              No image selected
             </span>
           )}
 
-          <label
-            className="
-              absolute bottom-3 right-3
-              bg-white text-black
-              px-3 py-1 rounded-lg 
-              text-xs font-mono tracking-widest
-              cursor-pointer hover:bg-gray-200 transition
-            "
-          >
-            Upload Image
+          <label className="absolute bottom-3 right-3 inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-4 text-sm font-medium text-[var(--secondary-foreground)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
+            Upload image
             <input
               type="file"
               accept="image/*"
@@ -112,95 +140,87 @@ export default function CreateCustomerPage() {
           </label>
         </div>
 
-        {/* FORM */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
             <Input
-              label="Customer Code"
+              label="Customer code"
               value={form.code}
-              onChange={(v: string) => updateField("code", v)}
+              onChange={(e) => updateField("code", e.target.value)}
               placeholder="CUST-001"
+              error={errors.code}
             />
 
             <Input
               label="Name"
               value={form.name}
-              onChange={(v: string) => updateField("name", v)}
-              placeholder="Customer Name"
+              onChange={(e) => updateField("name", e.target.value)}
+              placeholder="Customer name"
+              error={errors.name}
             />
 
             <Input
-              label="Contact Person"
+              label="Contact person"
               value={form.contact}
-              onChange={(v: string) => updateField("contact", v)}
-              placeholder="Mr. John Doe"
+              onChange={(e) => updateField("contact", e.target.value)}
+              placeholder="e.g. John Doe"
+              error={errors.contact}
             />
 
             <Input
               label="Email"
+              type="email"
               value={form.email}
-              onChange={(v: string) => updateField("email", v)}
+              onChange={(e) => updateField("email", e.target.value)}
               placeholder="example@mail.com"
+              error={errors.email}
+              hint="Optional."
             />
 
             <Input
               label="Phone"
               value={form.phone}
-              onChange={(v: string) => updateField("phone", v)}
+              onChange={(e) => updateField("phone", e.target.value)}
               placeholder="+62..."
+              error={errors.phone}
             />
 
-            {/* ADDRESS */}
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium font-mono tracking-wide text-gray-300">
+            {/* Address */}
+            <div className="md:col-span-2 space-y-1.5">
+              <label className="block text-sm font-medium text-[var(--foreground)]">
                 Address
               </label>
               <textarea
                 value={form.address}
                 onChange={(e) => updateField("address", e.target.value)}
-                className="
-                  w-full h-24 bg-[#0d0e10] border border-[#1c1d22]
-                  rounded-lg p-2 resize-none
-                "
+                className={`w-full h-24 rounded-lg border bg-[var(--input)] p-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] resize-none transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--ring)] ${
+                  errors.address
+                    ? "border-[var(--danger)]"
+                    : "border-[var(--border)]"
+                }`}
                 placeholder="Full address"
               />
+              {errors.address && (
+                <p className="text-xs font-medium text-[var(--danger-text)]">
+                  {errors.address}
+                </p>
+              )}
             </div>
           </div>
 
           <Button
             type="submit"
-            className="
-              w-full py-3 text-lg rounded-xl 
-              bg-white text-black font-mono tracking-widest
-              hover:bg-gray-200 transition
-            "
+            variant="primary"
+            size="lg"
+            loading={saving}
+            className="w-full"
           >
-            CREATE CUSTOMER
+            Create customer
           </Button>
 
         </form>
       </Card>
     </DashboardShell>
-  );
-}
-
-/* Reusable Input Component */
-function Input({ label, value, onChange, placeholder }: any) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium font-mono tracking-wide text-gray-300">
-        {label}
-      </label>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="
-          px-3 py-2 rounded-lg bg-[#0e0f13] 
-          border border-[#1c1d22]
-        "
-        placeholder={placeholder}
-      />
-    </div>
   );
 }

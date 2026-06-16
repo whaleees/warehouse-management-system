@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import Badge from "@/components/ui/badge";
+import StatusBadge from "@/components/ui/status-badge";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { salesOrderStatusColor } from "@/lib/status";
+import { useRole } from "@/lib/roles";
 import { Plus, ArrowRight, User2 } from "lucide-react";
 
 type SalesOrderStatus =
@@ -34,9 +36,9 @@ interface SalesOrder {
   shipments?: { id: string }[];
 }
 
-
 export default function SalesOrdersPage() {
   const router = useRouter();
+  const { can } = useRole();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,153 +59,111 @@ export default function SalesOrdersPage() {
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+              Sales orders
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Customer orders waiting to be approved and shipped.
+            </p>
+          </div>
 
-        {/* HEADER (MATCH INVENTORY STYLE) */}
-        <div>
-          <h1 className="text-xl font-mono tracking-widest text-white mb-1">
-            SALES ORDERS
-          </h1>
-          <p className="text-xs font-mono text-gray-500 tracking-widest">
-            CUSTOMER ORDER PROCESSING
-          </p>
+          {can("manage:business") && (
+            <Button
+              variant="primary"
+              onClick={() => router.push("/sales-orders/create")}
+            >
+              <Plus size={16} />
+              New sales order
+            </Button>
+          )}
         </div>
 
-        {/* TOP RIGHT BUTTON */}
-        <div className="flex justify-end">
-          <Button
-            onClick={() => router.push("/sales-orders/create")}
-            className="
-              flex items-center gap-2 
-              bg-white text-black 
-              hover:bg-gray-200 
-              font-mono tracking-wide 
-            "
-          >
-            <Plus size={16} className="text-black" />
-            NEW SALES ORDER
-          </Button>
-        </div>
-
-        {/* TABLE */}
-        <Card className="bg-[#0e0f12] border border-[#1c1d22] rounded-xl overflow-hidden p-0">
-          <table className="w-full text-sm font-mono tracking-wide">
-            <thead className="bg-[#111217] text-gray-500 text-[11px] uppercase">
-              <tr>
-                <th className="px-5 py-3 text-left">Order</th>
-                <th className="px-5 py-3 text-left">Customer</th>
-                <th className="px-5 py-3 text-left">Date</th>
-                <th className="px-5 py-3 text-center">Shipments</th>
-                <th className="px-5 py-3 text-right">Status</th>
-                <th className="px-5 py-3 text-right">Action</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {/* LOADING */}
-              {loading && (
+        {/* Table */}
+        <Card className="p-0 overflow-hidden">
+          {loading ? (
+            <div className="px-5 py-10">
+              <LoadingState message="Loading sales orders…" />
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="px-5 py-10">
+              <EmptyState message="No sales orders yet. Create one with the New sales order button above." />
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="border-b border-[var(--border)] bg-[var(--muted)] text-left text-xs font-medium text-[var(--muted-foreground)]">
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="px-5 py-6 text-center text-gray-500 text-xs"
-                  >
-                    LOADING SALES ORDERS...
-                  </td>
+                  <th className="px-5 py-3">Order</th>
+                  <th className="px-5 py-3">Customer</th>
+                  <th className="px-5 py-3">Date</th>
+                  <th className="px-5 py-3 text-center">Shipments</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Open</th>
                 </tr>
-              )}
+              </thead>
 
-              {/* EMPTY */}
-              {!loading && orders.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-5 py-6 text-center text-gray-500 text-xs"
-                  >
-                    NO SALES ORDERS FOUND.
-                  </td>
-                </tr>
-              )}
-
-              {/* ROWS */}
-              {!loading &&
-                orders.map((so) => (
+              <tbody className="divide-y divide-[var(--border)]">
+                {orders.map((so) => (
                   <tr
                     key={so.id}
-                    className="
-                      border-t border-[#1c1d22]
-                      hover:bg-[#15161b] transition
-                    "
+                    className="cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
+                    onClick={() => router.push(`/sales-orders/${so.id}`)}
                   >
-                    {/* ORDER */}
-                    <td
-                      className="px-5 py-3 font-semibold cursor-pointer"
-                      onClick={() => router.push(`/sales-orders/${so.id}`)}
-                    >
+                    {/* Order */}
+                    <td className="px-5 py-3 font-semibold text-[var(--foreground)]">
                       {so.orderNumber}
                     </td>
 
-                    {/* CUSTOMER */}
-                    <td
-                      className="px-5 py-3 cursor-pointer"
-                      onClick={() => router.push(`/sales-orders/${so.id}`)}
-                    >
+                    {/* Customer */}
+                    <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
-                        <User2 size={14} className="text-gray-500" />
+                        <User2
+                          size={16}
+                          className="text-[var(--muted-foreground)]"
+                        />
                         <div className="flex flex-col">
-                          <span>{so.customer?.name ?? "-"}</span>
-                          <span className="text-[10px] text-gray-500">
-                            {so.customer?.code}
+                          <span className="text-[var(--foreground)]">
+                            {so.customer?.name ?? "-"}
                           </span>
+                          {so.customer?.code && (
+                            <span className="text-xs text-[var(--muted-foreground)]">
+                              {so.customer.code}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
 
-                    {/* DATE */}
-                    <td
-                      className="px-5 py-3 cursor-pointer"
-                      onClick={() => router.push(`/sales-orders/${so.id}`)}
-                    >
+                    {/* Date */}
+                    <td className="px-5 py-3 text-[var(--muted-foreground)]">
                       {formatDate(so.orderDate)}
                     </td>
 
-                    {/* SHIPMENTS */}
-                    <td
-                      className="px-5 py-3 text-center cursor-pointer font-bold text-white"
-                      onClick={() => router.push(`/sales-orders/${so.id}`)}
-                    >
+                    {/* Shipments */}
+                    <td className="px-5 py-3 text-center font-semibold text-[var(--foreground)]">
                       {so.shipments?.length ?? 0}
                     </td>
 
-                    {/* STATUS */}
-                    <td
-                      className="px-5 py-3 text-right cursor-pointer"
-                      onClick={() => router.push(`/sales-orders/${so.id}`)}
-                    >
-                      <Badge color={salesOrderStatusColor(so.status)}>
-                        {so.status}
-                      </Badge>
+                    {/* Status */}
+                    <td className="px-5 py-3">
+                      <StatusBadge kind="salesOrder" status={so.status} />
                     </td>
 
-                    {/* ACTION BUTTON */}
+                    {/* Open */}
                     <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => router.push(`/sales-orders/${so.id}`)}
-                        className="
-                          p-1 rounded
-                          hover:bg-[#1c1d22]
-                          transition
-                        "
-                      >
-                        <ArrowRight
-                          size={18}
-                          className="opacity-70 hover:opacity-100 transition"
-                        />
-                      </button>
+                      <ArrowRight
+                        size={18}
+                        className="ml-auto text-[var(--muted-foreground)]"
+                      />
                     </td>
                   </tr>
                 ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          )}
         </Card>
       </div>
     </DashboardShell>

@@ -1,17 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
+import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Plus } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import { ArrowLeft } from "lucide-react";
 
 export default function CreateLocationPage() {
   const router = useRouter();
   const { sectionId } = useParams();
+  const toast = useToast();
 
   const [loading, setLoading] = useState(false);
+  const [codeError, setCodeError] = useState<string | undefined>();
 
   const [form, setForm] = useState({
     code: "",
@@ -24,7 +29,7 @@ export default function CreateLocationPage() {
 
   async function saveLocation() {
     if (!form.code.trim()) {
-      alert("Location code is required.");
+      setCodeError("Enter a location code.");
       return;
     }
 
@@ -39,82 +44,83 @@ export default function CreateLocationPage() {
         }),
       });
 
+      toast.success("Location added.");
       router.push(`/sections/${sectionId}`);
     } catch (err) {
       console.error("Create location failed:", err);
-      alert(err instanceof ApiError ? err.message : "Failed to create location");
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't add the location. Check the details and try again."
+      );
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   return (
     <DashboardShell>
-      <div className="flex items-center gap-3 mb-8">
-        <button
-          className="p-2 hover:bg-[#1a1b1f] rounded-lg transition"
-          onClick={() => router.push(`/sections/${sectionId}`)}
-        >
-          <ArrowLeft size={20} />
-        </button>
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push(`/sections/${sectionId}`)}
+            aria-label="Back to section"
+          >
+            <ArrowLeft size={18} />
+          </Button>
+          <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+            Add a location
+          </h1>
+        </div>
 
-        <h1 className="text-xl font-mono tracking-widest flex items-center gap-2">
-          <Plus size={18} /> ADD LOCATION
-        </h1>
+        <Card className="max-w-lg">
+          <div className="space-y-6">
+            <Input
+              label="Location code"
+              placeholder="e.g. LOC-001-A"
+              value={form.code}
+              onChange={(e) => {
+                updateField("code", e.target.value);
+                if (codeError) setCodeError(undefined);
+              }}
+              error={codeError}
+            />
+
+            <div className="w-full space-y-1.5">
+              <label
+                htmlFor="location-type"
+                className="block text-sm font-medium text-[var(--foreground)]"
+              >
+                Type
+              </label>
+              <select
+                id="location-type"
+                className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] transition-colors focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                value={form.type}
+                onChange={(e) => updateField("type", e.target.value)}
+              >
+                <option value="BIN">Bin</option>
+                <option value="SECTION">Section</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-8 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push(`/sections/${sectionId}`)}
+            >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={saveLocation} loading={loading}>
+              Create location
+            </Button>
+          </div>
+        </Card>
       </div>
-
-      <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl max-w-lg">
-
-        {/* CODE */}
-        <div className="mb-6">
-          <label className="block text-[11px] font-mono tracking-widest text-gray-400 mb-1">
-            LOCATION CODE
-          </label>
-          <input
-            type="text"
-            className="
-              w-full bg-[#0e0f12] border border-[#2a2c32]
-              rounded-lg px-3 py-2 text-sm font-mono
-            "
-            placeholder="e.g. LOC-001-A"
-            value={form.code}
-            onChange={(e) => updateField("code", e.target.value)}
-          />
-        </div>
-
-        {/* TYPE */}
-        <div className="mb-6">
-          <label className="block text-[11px] font-mono tracking-widest text-gray-400 mb-1">
-            TYPE
-          </label>
-          <select
-            className="
-              w-full bg-[#0e0f12] border border-[#2a2c32]
-              rounded-lg px-3 py-2 text-sm font-mono
-            "
-            value={form.type}
-            onChange={(e) => updateField("type", e.target.value)}
-          >
-            <option value="BIN">BIN</option>
-            <option value="SECTION">SECTION</option>
-          </select>
-        </div>
-
-        {/* ACTION BUTTON */}
-        <div className="mt-8 flex justify-end">
-          <button
-            onClick={saveLocation}
-            disabled={loading}
-            className="
-              px-5 py-2 rounded-lg bg-white text-black 
-              font-mono text-xs tracking-widest font-semibold
-              hover:bg-gray-200 transition
-            "
-          >
-            {loading ? "SAVING..." : "CREATE LOCATION"}
-          </button>
-        </div>
-      </Card>
     </DashboardShell>
   );
 }

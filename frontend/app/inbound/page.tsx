@@ -6,11 +6,14 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import Badge from "@/components/ui/badge";
+import StatusBadge from "@/components/ui/status-badge";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { api } from "@/lib/api";
+import { useRole } from "@/lib/roles";
 import { formatDate } from "@/lib/format";
-import { grStatusColor } from "@/lib/status";
-import { Truck, ArrowRight } from "lucide-react";
+import { Truck, ArrowRight, Plus } from "lucide-react";
+import ReceiveModal from "./receive-modal";
 
 type GRStatus = "PENDING" | "RECEIVED";
 
@@ -32,9 +35,11 @@ interface InboundRow {
 
 export default function InboundListPage() {
   const router = useRouter();
+  const { can } = useRole();
 
   const [rows, setRows] = useState<InboundRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [receiving, setReceiving] = useState(false);
 
   async function loadInbound() {
     try {
@@ -62,50 +67,58 @@ export default function InboundListPage() {
       <div className="space-y-8">
 
         {/* HEADER */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Truck size={20} />
+            <span className="text-[var(--muted-foreground)]">
+              <Truck size={20} />
+            </span>
 
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Inbound
+              <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+                Goods receipts
               </h1>
-              <p className="text-xs text-[var(--text-muted)]">
-                List of Goods Receipts created from Purchase Orders.
+              <p
+                className="mt-1 text-sm text-[var(--muted-foreground)]"
+                title="A goods receipt (GRN) records the items that physically arrived from a purchase order."
+              >
+                Record deliveries as they arrive against your purchase orders.
               </p>
             </div>
           </div>
 
-          {/* WHITE XSTOCK BUTTON */}
-          <button
-            onClick={() => router.push("/purchase-orders")}
-            className="
-              bg-white text-black 
-              px-4 py-2 rounded-lg 
-              font-mono text-xs tracking-widest font-semibold
-              hover:bg-gray-200 transition
-            "
-          >
-            GO TO PURCHASE ORDERS
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => router.push("/purchase-orders")}
+            >
+              Purchase orders
+              <ArrowRight size={16} />
+            </Button>
+
+            {can("receive:goods") && (
+              <Button variant="primary" onClick={() => setReceiving(true)}>
+                <Plus size={16} /> Receive a delivery
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* TABLE */}
-        <Card
-          className="
-            bg-[#0e0f12] border border-[#1c1d22]
-            rounded-xl overflow-hidden p-0
-          "
-        >
-          <table className="w-full text-sm font-mono tracking-wide">
-            <thead className="bg-[#111217] text-gray-500 text-[11px] uppercase">
+        <Card className="overflow-hidden p-0">
+          <table className="w-full text-sm">
+            <thead className="border-b border-[var(--border)] bg-[var(--muted)] text-xs font-medium text-[var(--muted-foreground)]">
               <tr>
-                <th className="px-4 py-3 text-left">GRN</th>
-                <th className="px-4 py-3 text-left">Purchase Order</th>
+                <th
+                  className="px-4 py-3 text-left"
+                  title="Goods receipt note: the record of what arrived."
+                >
+                  Receipt
+                </th>
+                <th className="px-4 py-3 text-left">Purchase order</th>
                 <th className="px-4 py-3 text-left">Supplier</th>
-                <th className="px-4 py-3 text-left">Received At</th>
+                <th className="px-4 py-3 text-left">Received</th>
                 <th className="px-4 py-3 text-center">Status</th>
-                <th className="px-4 py-3 text-right">Action</th>
+                <th className="px-4 py-3 text-right">Open</th>
               </tr>
             </thead>
 
@@ -113,11 +126,8 @@ export default function InboundListPage() {
               {/* LOADING */}
               {loading && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-6 text-center text-gray-500 text-xs"
-                  >
-                    LOADING INBOUND...
+                  <td colSpan={6} className="px-4 py-6">
+                    <LoadingState message="Loading goods receipts…" />
                   </td>
                 </tr>
               )}
@@ -125,11 +135,18 @@ export default function InboundListPage() {
               {/* EMPTY */}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-6 text-center text-gray-500 text-xs"
-                  >
-                    NO INBOUND FOUND.
+                  <td colSpan={6} className="px-4 py-10">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <EmptyState message="No goods receipts yet. When a delivery arrives, start a receipt here." />
+                      {can("receive:goods") && (
+                        <Button
+                          variant="primary"
+                          onClick={() => setReceiving(true)}
+                        >
+                          <Plus size={16} /> Receive a delivery
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}
@@ -139,36 +156,31 @@ export default function InboundListPage() {
                 rows.map((row) => (
                   <tr
                     key={row.id}
-                    className="
-                      border-t border-[#1c1d22]
-                      hover:bg-[#15161b] transition cursor-pointer
-                    "
+                    className="cursor-pointer border-t border-[var(--border)] transition-colors hover:bg-[var(--bg-hover)]"
                     onClick={() => router.push(`/inbound/${row.id}`)}
                   >
-                    <td className="px-4 py-3 font-semibold">
+                    <td className="px-4 py-3 font-semibold text-[var(--foreground)]">
                       {row.receiptNumber}
                     </td>
 
-                    <td className="px-4 py-3 text-gray-300">
+                    <td className="px-4 py-3 text-[var(--foreground)]">
                       {row.purchaseOrder?.orderNumber ?? "—"}
                     </td>
 
-                    <td className="px-4 py-3 text-gray-400">
+                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
                       {row.purchaseOrder?.supplier?.name ?? "—"}
                     </td>
 
-                    <td className="px-4 py-3 text-gray-400">
+                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
                       {formatDate(row.receivedAt)}
                     </td>
 
                     <td className="px-4 py-3 text-center">
-                      <Badge color={grStatusColor(row.status)}>
-                        {row.status}
-                      </Badge>
+                      <StatusBadge kind="gr" status={row.status} />
                     </td>
 
-                    <td className="px-4 py-3 text-right">
-                      <ArrowRight size={14} className="opacity-70" />
+                    <td className="px-4 py-3 text-right text-[var(--muted-foreground)]">
+                      <ArrowRight size={16} className="inline-block" />
                     </td>
                   </tr>
                 ))}
@@ -177,6 +189,8 @@ export default function InboundListPage() {
         </Card>
 
       </div>
+
+      {receiving && <ReceiveModal onClose={() => setReceiving(false)} />}
     </DashboardShell>
   );
 }

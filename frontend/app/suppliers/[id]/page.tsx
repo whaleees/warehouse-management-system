@@ -5,14 +5,20 @@ import { useRouter, useParams } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import Badge from "@/components/ui/badge";
+import LoadingState from "@/components/ui/loading-state";
 import { api } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/config";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export default function SupplierDetailPage() {
   const router = useRouter();
   const params = useParams();
   const supplierId = params?.id as string;
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [supplier, setSupplier] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -28,14 +34,23 @@ export default function SupplierDetailPage() {
   }
 
   async function deleteSupplier() {
-    if (!confirm("Delete this supplier?")) return;
+    const ok = await confirm({
+      title: `Delete ${supplier.name}?`,
+      description: "This removes the supplier from your list. This can't be undone.",
+      confirmLabel: "Delete supplier",
+      tone: "danger",
+      onConfirm: async () => {
+        try {
+          await api(`/supplier/${supplierId}`, { method: "DELETE" });
+        } catch {
+          throw new Error("Couldn't delete this supplier. Try again.");
+        }
+      },
+    });
 
-    try {
-      await api(`/supplier/${supplierId}`, { method: "DELETE" });
+    if (ok) {
+      toast.success(`${supplier.name} was deleted.`);
       router.push("/suppliers");
-    } catch (err) {
-      console.error("Delete failed:", err);
-      alert("Failed to delete supplier.");
     }
   }
 
@@ -46,9 +61,7 @@ export default function SupplierDetailPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-xs text-gray-500 font-mono tracking-wide">
-          Loading supplier...
-        </p>
+        <LoadingState message="Loading supplier…" />
       </DashboardShell>
     );
   }
@@ -56,8 +69,8 @@ export default function SupplierDetailPage() {
   if (!supplier) {
     return (
       <DashboardShell>
-        <p className="text-sm text-red-400 font-mono tracking-wide">
-          Supplier not found.
+        <p className="text-sm text-[var(--danger-text)]">
+          We couldn&apos;t find this supplier.
         </p>
       </DashboardShell>
     );
@@ -65,81 +78,84 @@ export default function SupplierDetailPage() {
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
+      <div className="space-y-8">
 
-        {/* HEADER */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              className="p-2 rounded-lg hover:bg-[#15161b] transition"
+              className="rounded-lg p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--foreground)]"
               onClick={() => router.push("/suppliers")}
+              aria-label="Back to suppliers"
             >
               <ArrowLeft size={18} />
             </button>
 
-            <h1 className="text-xl font-mono font-semibold tracking-wider uppercase">
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
               {supplier.name}
             </h1>
           </div>
 
-          {/* ACTION BUTTONS */}
+          {/* Action buttons */}
           <div className="flex gap-3">
-            <button
+            <Button
+              variant="primary"
               onClick={() => router.push(`/suppliers/${supplierId}/edit`)}
-              className="
-                px-4 py-2 rounded-lg bg-white text-black 
-                font-mono text-xs tracking-widest font-semibold
-                hover:bg-gray-200 transition flex items-center gap-2
-              "
             >
-              <Pencil size={14} /> EDIT
-            </button>
+              <Pencil size={16} /> Edit
+            </Button>
 
-            <button
-              onClick={deleteSupplier}
-              className="
-                px-4 py-2 rounded-lg bg-red-500 text-white 
-                font-mono text-xs tracking-widest font-semibold
-                hover:bg-red-600 transition flex items-center gap-2
-              "
-            >
-              <Trash2 size={14} /> DELETE
-            </button>
+            <Button variant="danger" onClick={deleteSupplier}>
+              <Trash2 size={16} /> Delete
+            </Button>
           </div>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        {/* Main content */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
 
-          {/* IMAGE BLOCK — MATCHES PRODUCT DETAIL */}
-          <Card className="p-4 bg-[#111217] border border-[#1c1d22] rounded-xl">
+          {/* Image */}
+          <Card className="p-4">
             {supplier.imagePath ? (
               <img
                 src={`${API_BASE_URL}${supplier.imagePath}`}
                 alt={supplier.name}
-                className="w-full h-64 object-cover rounded-lg"
+                className="h-64 w-full rounded-lg object-cover"
               />
             ) : (
-              <div className="w-full h-64 bg-[#0d0e10] rounded-lg flex items-center justify-center text-gray-500 font-mono text-xs tracking-wider">
-                NO IMAGE
+              <div className="flex h-64 w-full items-center justify-center rounded-lg bg-[var(--muted)] text-sm text-[var(--muted-foreground)]">
+                No image
               </div>
             )}
           </Card>
 
-          {/* DETAILS */}
-          <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl lg:col-span-2">
-            <h2 className="text-lg font-mono tracking-wider font-semibold mb-6 uppercase">
-              DETAILS
+          {/* Details */}
+          <Card className="p-8 lg:col-span-2">
+            <h2 className="mb-6 text-lg font-semibold text-[var(--card-foreground)]">
+              Details
             </h2>
 
             <div className="space-y-4 text-sm">
-              <DetailItem label="NAME" value={supplier.name} />
-              <DetailItem label="CODE" value={supplier.code} />
-              {supplier.contact && <DetailItem label="CONTACT PERSON" value={supplier.contact} />}
-              {supplier.phone && <DetailItem label="PHONE" value={supplier.phone} />}
-              {supplier.email && <DetailItem label="EMAIL" value={supplier.email} />}
-              {supplier.address && <DetailItem label="ADDRESS" value={supplier.address} />}
-              <DetailItem label="ACTIVE" value={supplier.isActive ? "YES" : "NO"} />
+              <DetailItem label="Name" value={supplier.name} />
+              <DetailItem label="Code" value={supplier.code} />
+              {supplier.contact && (
+                <DetailItem label="Contact person" value={supplier.contact} />
+              )}
+              {supplier.phone && (
+                <DetailItem label="Phone" value={supplier.phone} />
+              )}
+              {supplier.email && (
+                <DetailItem label="Email" value={supplier.email} />
+              )}
+              {supplier.address && (
+                <DetailItem label="Address" value={supplier.address} />
+              )}
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+                <span className="text-[var(--muted-foreground)]">Status</span>
+                <Badge color={supplier.isActive ? "success" : "default"}>
+                  {supplier.isActive ? "Active" : "Inactive"}
+                </Badge>
+              </div>
             </div>
           </Card>
 
@@ -152,11 +168,9 @@ export default function SupplierDetailPage() {
 /* Reusable detail row */
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between border-b border-[#232428] pb-2">
-      <span className="text-[10px] font-mono tracking-widest text-gray-500">
-        {label}
-      </span>
-      <span className="font-mono text-sm tracking-wide text-white">{value}</span>
+    <div className="flex justify-between border-b border-[var(--border)] pb-2">
+      <span className="text-[var(--muted-foreground)]">{label}</span>
+      <span className="text-[var(--foreground)]">{value}</span>
     </div>
   );
 }

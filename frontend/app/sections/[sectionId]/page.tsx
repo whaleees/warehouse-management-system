@@ -5,23 +5,36 @@ import { useRouter, useParams } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import LoadingState from "@/components/ui/loading-state";
+import ErrorState from "@/components/ui/error-state";
+import EmptyState from "@/components/ui/empty-state";
 import { api } from "@/lib/api";
-import {
-  ArrowLeft,
-  Pencil,
-  Trash2,
-  Plus,
-  ArrowRight,
-} from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { ArrowLeft, Pencil, Trash2, Plus } from "lucide-react";
+import LocationModal from "../location-modal";
+import { useRole } from "@/lib/roles";
+
+interface LocationItem {
+  id: string;
+  code: string;
+  type: string;
+}
 
 export default function SectionDetailPage() {
   const router = useRouter();
   const params = useParams();
   const sectionId = params?.sectionId as string;
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { can } = useRole();
 
   const [section, setSection] = useState<any>(null);
-  const [locations, setLocations] = useState<any[]>([]);
+  const [locations, setLocations] = useState<LocationItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // null = closed, "new" = add, object = edit that location.
+  const [modal, setModal] = useState<"new" | LocationItem | null>(null);
 
   async function loadData() {
     try {
@@ -39,14 +52,56 @@ export default function SectionDetailPage() {
   }
 
   async function deleteSection() {
-    if (!confirm("Delete this section? Locations may prevent deletion.")) return;
+    const ok = await confirm({
+      title: "Delete this section?",
+      description:
+        "This permanently removes the section. It only works if the section has no locations. This can't be undone.",
+      confirmLabel: "Delete section",
+      tone: "danger",
+      onConfirm: async () => {
+        try {
+          await api(`/sections/${sectionId}`, { method: "DELETE" });
+        } catch {
+          throw new Error(
+            "Couldn't delete the section. Remove its locations first, then try again."
+          );
+        }
+      },
+    });
 
-    try {
-      await api(`/sections/${sectionId}`, { method: "DELETE" });
+    if (ok) {
+      toast.success("Section deleted.");
       router.push("/sections");
-    } catch (err) {
-      console.error(err);
-      alert("Cannot delete section. Ensure no locations exist.");
+    }
+  }
+
+  async function deleteLocation(loc: LocationItem) {
+    const ok = await confirm({
+      title: "Delete this location?",
+      description: (
+        <>
+          This permanently removes <strong>{loc.code}</strong> from the section.
+          This can&apos;t be undone.
+        </>
+      ),
+      confirmLabel: "Delete location",
+      tone: "danger",
+      onConfirm: async () => {
+        try {
+          await api(`/sections/${sectionId}/locations/${loc.id}`, {
+            method: "DELETE",
+          });
+        } catch {
+          throw new Error(
+            "Couldn't delete the location. Make sure no stock is stored here, then try again."
+          );
+        }
+      },
+    });
+
+    if (ok) {
+      toast.success("Location deleted.");
+      loadData();
     }
   }
 
@@ -57,7 +112,7 @@ export default function SectionDetailPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-sm text-gray-500 font-mono">LOADING SECTION...</p>
+        <LoadingState message="Loading section…" />
       </DashboardShell>
     );
   }
@@ -65,167 +120,164 @@ export default function SectionDetailPage() {
   if (!section) {
     return (
       <DashboardShell>
-        <p className="text-sm text-red-500 font-mono">SECTION NOT FOUND.</p>
+        <ErrorState message="We couldn't find that section." />
       </DashboardShell>
     );
   }
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
-
-        {/* HEADER */}
+      <div className="space-y-8">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => router.push("/sections")}
-              className="p-2 hover:bg-[#1a1b1f] rounded-lg transition"
+              aria-label="Back to sections"
             >
-              <ArrowLeft size={20} />
-            </button>
+              <ArrowLeft size={18} />
+            </Button>
 
             <div className="flex flex-col">
-              <h1 className="text-xl font-mono tracking-widest">{section.code}</h1>
-              <span className="text-xs text-gray-400 font-mono tracking-widest">
-                {section.description || "NO DESCRIPTION"}
+              <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+                {section.code}
+              </h1>
+              <span className="text-sm text-[var(--muted-foreground)]">
+                {section.description || "No description"}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* EDIT */}
-            <button
-              onClick={() => router.push(`/sections/${sectionId}/edit`)}
-              className="
-                px-4 py-2 rounded-lg bg-white text-black 
-                font-mono text-xs tracking-widest font-semibold
-                hover:bg-gray-200 transition flex items-center gap-2
-              "
-            >
-              <Pencil size={14} /> EDIT
-            </button>
+            {can("manage:masterData") && (
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/sections/${sectionId}/edit`)}
+              >
+                <Pencil size={16} /> Edit
+              </Button>
+            )}
 
-            {/* DELETE */}
-            <button
-              onClick={deleteSection}
-              className="
-                px-4 py-2 rounded-lg bg-red-600 text-white 
-                font-mono text-xs tracking-widest font-semibold
-                hover:bg-red-500 transition flex items-center gap-2
-              "
-            >
-              <Trash2 size={14} /> DELETE
-            </button>
+            {can("manage:masterData") && (
+              <Button variant="danger" onClick={deleteSection}>
+                <Trash2 size={16} /> Delete
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* DETAILS CARD */}
-        <Card className="p-6 bg-[#111217] border border-[#1c1d22] rounded-xl">
-          <h2 className="text-lg font-semibold mb-4 font-mono tracking-widest">
-            SECTION DETAILS
+        {/* Details card */}
+        <Card>
+          <h2 className="mb-4 text-base font-semibold text-[var(--card-foreground)]">
+            Section details
           </h2>
 
-          <div className="space-y-4 text-sm font-mono">
-            <DetailItem label="CODE" value={section.code} />
+          <div className="space-y-4 text-sm">
+            <DetailItem label="Code" value={section.code} />
+            <DetailItem label="Description" value={section.description || "—"} />
             <DetailItem
-              label="DESCRIPTION"
-              value={section.description || "—"}
-            />
-            <DetailItem
-              label="TOTAL LOCATIONS"
+              label="Total locations"
               value={String(locations.length)}
             />
           </div>
         </Card>
 
-        {/* LOCATIONS HEADER */}
+        {/* Locations header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-mono tracking-widest">LOCATIONS</h2>
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+            Locations
+          </h2>
 
-          <button
-            onClick={() =>
-              router.push(`/sections/${sectionId}/locations/create`)
-            }
-            className="
-              px-4 py-2 rounded-lg bg-white text-black 
-              font-mono text-xs tracking-widest font-semibold
-              hover:bg-gray-200 transition flex items-center gap-2
-            "
-          >
-            <Plus size={14} /> ADD LOCATION
-          </button>
+          {can("manage:masterData") && (
+            <Button variant="primary" onClick={() => setModal("new")}>
+              <Plus size={16} /> Add location
+            </Button>
+          )}
         </div>
 
-        {/* LOCATION TABLE */}
-        <Card className="p-0 bg-[#111217] border border-[#1c1d22] rounded-xl overflow-hidden">
-          <table className="w-full text-sm font-mono tracking-wider">
-            <thead className="bg-[#0e0f12] text-gray-500">
-              <tr>
-                <th className="px-4 py-3 text-left text-[10px] tracking-widest">
-                  CODE
-                </th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-widest">
-                  TYPE
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {locations.length === 0 ? (
+        {/* Location table */}
+        <Card className="overflow-hidden p-0">
+          {locations.length === 0 ? (
+            <div className="p-5">
+              <EmptyState message="No locations yet. Add one with the Add location button above." />
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--muted)] text-[var(--muted-foreground)]">
                 <tr>
-                  <td
-                    colSpan={3}
-                    className="py-4 text-center text-gray-500 text-xs"
-                  >
-                    NO LOCATIONS FOUND.
-                  </td>
+                  <th className="px-4 py-3 text-left font-medium">Location</th>
+                  <th className="px-4 py-3 text-left font-medium">Type</th>
+                  <th className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
-              ) : (
-                locations.map((loc) => (
+              </thead>
+
+              <tbody>
+                {locations.map((loc) => (
                   <tr
                     key={loc.id}
-                    className="
-                      border-t border-[#1c1d22]
-                      hover:bg-[#131419] transition cursor-pointer
-                    "
-                    onClick={() =>
-                      router.push(`/sections/${sectionId}/locations/${loc.id}`)
-                    }
+                    className="border-t border-[var(--border)] transition-colors hover:bg-[var(--bg-hover)]"
                   >
-                    {/* CODE */}
-                    <td className="px-4 py-3 text-white font-semibold">
+                    <td className="px-4 py-3 font-medium text-[var(--foreground)]">
                       {loc.code}
                     </td>
-
-                    {/* TYPE */}
-                    <td className="px-4 py-3 text-gray-300">
+                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
                       {loc.type}
                     </td>
-
-                    {/* ACTION */}
-                    <td className="px-4 py-3 text-right">
-                      <ArrowRight
-                        size={16}
-                        className="text-gray-400 hover:text-white transition"
-                      />
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        {can("manage:masterData") && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setModal(loc)}
+                            aria-label={`Edit ${loc.code}`}
+                          >
+                            <Pencil size={15} /> Edit
+                          </Button>
+                        )}
+                        {can("manage:masterData") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteLocation(loc)}
+                            aria-label={`Delete ${loc.code}`}
+                            className="text-[var(--danger-text)] hover:bg-[var(--danger-bg)]"
+                          >
+                            <Trash2 size={15} /> Delete
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Card>
-
       </div>
+
+      {modal && (
+        <LocationModal
+          sectionId={sectionId}
+          location={modal === "new" ? null : modal}
+          onClose={() => setModal(null)}
+          onSuccess={() => {
+            setModal(null);
+            loadData();
+          }}
+        />
+      )}
     </DashboardShell>
   );
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between border-b border-[#232428] pb-2">
-      <span className="text-gray-500 text-[10px] tracking-widest">{label}</span>
-      <span className="text-white font-semibold">{value}</span>
+    <div className="flex justify-between border-b border-[var(--border)] pb-2">
+      <span className="text-[var(--muted-foreground)]">{label}</span>
+      <span className="font-medium text-[var(--foreground)]">{value}</span>
     </div>
   );
 }

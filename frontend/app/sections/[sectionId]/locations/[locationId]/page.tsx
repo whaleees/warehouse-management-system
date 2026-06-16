@@ -4,13 +4,20 @@ import { useEffect, useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import LoadingState from "@/components/ui/loading-state";
+import ErrorState from "@/components/ui/error-state";
+import EmptyState from "@/components/ui/empty-state";
 import { api } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ArrowLeft, Pencil, Trash2, Boxes } from "lucide-react";
 
 export default function LocationDetailPage() {
   const router = useRouter();
   const { sectionId, locationId } = useParams();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [location, setLocation] = useState<any>(null);
   const [inventory, setInventory] = useState<any[]>([]);
@@ -41,13 +48,29 @@ export default function LocationDetailPage() {
   }
 
   async function deleteLocation() {
-    if (!confirm("DELETE THIS LOCATION?")) return;
-
-    await api(`/sections/${sectionId}/locations/${locationId}`, {
-      method: "DELETE",
+    const ok = await confirm({
+      title: "Delete this location?",
+      description:
+        "This permanently removes the location from the section. This can't be undone.",
+      confirmLabel: "Delete location",
+      tone: "danger",
+      onConfirm: async () => {
+        try {
+          await api(`/sections/${sectionId}/locations/${locationId}`, {
+            method: "DELETE",
+          });
+        } catch {
+          throw new Error(
+            "Couldn't delete the location. Make sure no stock is stored here, then try again."
+          );
+        }
+      },
     });
 
-    router.push(`/sections/${sectionId}`);
+    if (ok) {
+      toast.success("Location deleted.");
+      router.push(`/sections/${sectionId}`);
+    }
   }
 
   useEffect(() => {
@@ -59,7 +82,7 @@ export default function LocationDetailPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-xs font-mono text-gray-500">LOADING LOCATION...</p>
+        <LoadingState message="Loading location…" />
       </DashboardShell>
     );
   }
@@ -67,120 +90,112 @@ export default function LocationDetailPage() {
   if (!location) {
     return (
       <DashboardShell>
-        <p className="text-sm font-mono text-red-400">LOCATION NOT FOUND.</p>
+        <ErrorState message="We couldn't find that location." />
       </DashboardShell>
     );
   }
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
-
-        {/* HEADER */}
+      <div className="space-y-8">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
-              className="p-2 hover:bg-[#1a1c20] rounded-lg transition"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => router.push(`/sections/${sectionId}`)}
+              aria-label="Back to section"
             >
-              <ArrowLeft size={20} className="text-gray-300" />
-            </button>
+              <ArrowLeft size={18} />
+            </Button>
 
-            <h1 className="text-xl font-mono tracking-widest text-white">
-              {location.code.toUpperCase()}
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+              {location.code}
             </h1>
           </div>
 
-          {/* ACTIONS */}
+          {/* Actions */}
           <div className="flex gap-3">
-            <button
+            <Button
+              variant="outline"
               onClick={() =>
                 router.push(
                   `/sections/${sectionId}/locations/${locationId}/edit`
                 )
               }
-              className="
-                px-4 py-2 rounded-lg bg-white text-black 
-                font-mono text-xs tracking-widest
-                hover:bg-gray-200 transition flex items-center gap-2
-              "
             >
-              <Pencil size={14} /> EDIT
-            </button>
+              <Pencil size={16} /> Edit
+            </Button>
 
-            <button
-              onClick={deleteLocation}
-              className="
-                px-4 py-2 rounded-lg border border-red-500 text-red-400 
-                font-mono text-xs tracking-widest hover:bg-red-500/20
-                transition flex items-center gap-2
-              "
-            >
-              <Trash2 size={14} /> DELETE
-            </button>
+            <Button variant="danger" onClick={deleteLocation}>
+              <Trash2 size={16} /> Delete
+            </Button>
           </div>
         </div>
 
-        {/* DETAILS CARD */}
-        <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl">
-          <h2 className="text-sm font-mono tracking-widest text-gray-400 mb-6">
-            LOCATION DETAILS
+        {/* Details card */}
+        <Card>
+          <h2 className="mb-4 text-base font-semibold text-[var(--card-foreground)]">
+            Location details
           </h2>
 
           <div className="space-y-4 text-sm">
-            <Detail label="CODE" value={location.code} />
-            <Detail label="TYPE" value={location.type} />
+            <Detail label="Code" value={location.code} />
+            <Detail label="Type" value={location.type} />
           </div>
         </Card>
 
-        {/* INVENTORY LIST */}
-        <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl">
-          <div className="flex items-center gap-3 mb-6">
-            <Boxes className="text-[var(--accent)] w-5 h-5" />
-            <h2 className="text-sm font-mono tracking-widest text-gray-400">
-              PRODUCTS STORED HERE
+        {/* Inventory list */}
+        <Card>
+          <div className="mb-4 flex items-center gap-3">
+            <Boxes className="h-5 w-5 text-[var(--primary)]" />
+            <h2 className="text-base font-semibold text-[var(--card-foreground)]">
+              Products stored here
             </h2>
           </div>
 
           {inventory.length === 0 ? (
-            <p className="text-xs font-mono text-gray-500">
-              NO PRODUCTS IN THIS LOCATION.
-            </p>
+            <EmptyState message="No products are stored in this location yet." />
           ) : (
-            <table className="w-full text-sm font-mono tracking-wide">
-              <thead className="bg-[#0e0f12] text-gray-500">
-                <tr>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-widest">
-                    PRODUCT
-                  </th>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-widest">
-                    BATCH
-                  </th>
-                  <th className="px-4 py-3 text-right text-[10px] tracking-widest">
-                    QTY
-                  </th>
-                  <th className="px-4 py-3 text-right text-[10px] tracking-widest">
-                    RESERVED
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {inventory.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="border-t border-[#1c1d22] hover:bg-[#131419] transition"
-                  >
-                    <td className="px-4 py-3">{inv.product?.name}</td>
-                    <td className="px-4 py-3">{inv.batch?.code ?? "—"}</td>
-                    <td className="px-4 py-3 text-right">
-                      {inv.quantity} {inv.product?.uom}
-                    </td>
-                    <td className="px-4 py-3 text-right">{inv.reservedQty}</td>
+            <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--muted)] text-[var(--muted-foreground)]">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium">Product</th>
+                    <th className="px-4 py-3 text-left font-medium">Batch</th>
+                    <th className="px-4 py-3 text-right font-medium">
+                      Quantity
+                    </th>
+                    <th className="px-4 py-3 text-right font-medium">
+                      Reserved
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody>
+                  {inventory.map((inv) => (
+                    <tr
+                      key={inv.id}
+                      className="border-t border-[var(--border)] transition-colors hover:bg-[var(--bg-hover)]"
+                    >
+                      <td className="px-4 py-3 text-[var(--foreground)]">
+                        {inv.product?.name}
+                      </td>
+                      <td className="px-4 py-3 text-[var(--muted-foreground)]">
+                        {inv.batch?.code ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--foreground)]">
+                        {inv.quantity} {inv.product?.uom}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--muted-foreground)]">
+                        {inv.reservedQty}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       </div>
@@ -190,11 +205,9 @@ export default function LocationDetailPage() {
 
 function Detail({ label, value }: any) {
   return (
-    <div className="flex justify-between border-b border-[#232428] pb-2">
-      <span className="text-[11px] text-gray-500 font-mono tracking-widest">
-        {label}
-      </span>
-      <span className="font-semibold text-white">{value}</span>
+    <div className="flex justify-between border-b border-[var(--border)] pb-2">
+      <span className="text-[var(--muted-foreground)]">{label}</span>
+      <span className="font-medium text-[var(--foreground)]">{value}</span>
     </div>
   );
 }

@@ -3,15 +3,22 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
+import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
+import LoadingState from "@/components/ui/loading-state";
 import { api } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toast";
+import { ArrowLeft } from "lucide-react";
 
 export default function EditLocationPage() {
   const router = useRouter();
   const { sectionId, locationId } = useParams();
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [codeError, setCodeError] = useState<string | undefined>();
 
   const [form, setForm] = useState({
     code: "",
@@ -26,7 +33,6 @@ export default function EditLocationPage() {
         code: loc.code,
         type: loc.type,
       });
-
     } catch (err) {
       console.error("Failed loading location:", err);
     }
@@ -43,6 +49,11 @@ export default function EditLocationPage() {
   }
 
   async function handleSave() {
+    if (!form.code.trim()) {
+      setCodeError("Enter a location code.");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -54,92 +65,96 @@ export default function EditLocationPage() {
         }),
       });
 
+      toast.success("Location updated.");
       router.push(`/sections/${sectionId}/locations/${locationId}`);
     } catch (err) {
       console.error("Location update failed:", err);
-      alert("Failed to save changes");
+      toast.error("Couldn't save your changes. Try again.");
+      setSaving(false);
     }
-
-    setSaving(false);
   }
 
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-xs font-mono text-gray-500">LOADING LOCATION...</p>
+        <LoadingState message="Loading location…" />
       </DashboardShell>
     );
   }
 
   return (
     <DashboardShell>
-      <div className="mb-10">
-        <h1 className="text-xl font-mono tracking-widest text-white mb-1">
-          EDIT LOCATION
-        </h1>
-        <p className="text-xs font-mono text-gray-500 tracking-widest">
-          UPDATE LOCATION DETAILS
-        </p>
-      </div>
-
-      <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl space-y-8 max-w-xl">
-
-        {/* CODE */}
-        <Field label="CODE">
-          <input
-            value={form.code}
-            onChange={(e) => updateField("code", e.target.value)}
-            className="input-style"
-            placeholder="Location code"
-          />
-        </Field>
-
-        {/* TYPE */}
-        <Field label="TYPE">
-          <select
-            value={form.type}
-            onChange={(e) => updateField("type", e.target.value)}
-            className="input-style"
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              router.push(`/sections/${sectionId}/locations/${locationId}`)
+            }
+            aria-label="Back to location"
           >
-            <option value="BIN">BIN</option>
-            <option value="SECTION">SECTION</option>
-          </select>
-        </Field>
-
-        {/* SAVE */}
-        <div className="flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="
-              px-6 py-2.5 rounded-lg 
-              bg-white text-black font-mono text-xs tracking-widest
-              hover:bg-gray-200 transition w-full md:w-auto
-            "
-          >
-            {saving ? "SAVING..." : "SAVE CHANGES"}
-          </button>
+            <ArrowLeft size={18} />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+              Edit location
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Update this location's code and type.
+            </p>
+          </div>
         </div>
-      </Card>
+
+        <Card className="max-w-xl">
+          <div className="space-y-6">
+            <Input
+              label="Code"
+              placeholder="Location code"
+              value={form.code}
+              onChange={(e) => {
+                updateField("code", e.target.value);
+                if (codeError) setCodeError(undefined);
+              }}
+              error={codeError}
+            />
+
+            <div className="w-full space-y-1.5">
+              <label
+                htmlFor="location-type"
+                className="block text-sm font-medium text-[var(--foreground)]"
+              >
+                Type
+              </label>
+              <select
+                id="location-type"
+                value={form.type}
+                onChange={(e) => updateField("type", e.target.value)}
+                className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] transition-colors focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              >
+                <option value="BIN">Bin</option>
+                <option value="SECTION">Section</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                router.push(`/sections/${sectionId}/locations/${locationId}`)
+              }
+            >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleSave} loading={saving}>
+              Save changes
+            </Button>
+          </div>
+        </Card>
+      </div>
     </DashboardShell>
   );
 }
-
-/* Shared field wrapper */
-function Field({ label, children }: any) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="text-gray-400 text-[11px] font-mono tracking-widest">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-/* Shared input style */
-const inputStyles = `
-  w-full rounded-lg p-2.5 text-sm
-  bg-[#0e0f13] border border-[#1c1d22]
-  focus:border-white outline-none font-mono
-`;

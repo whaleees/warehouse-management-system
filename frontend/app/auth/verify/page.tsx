@@ -12,7 +12,7 @@ function VerifyForm() {
   const email = search.get("email") ?? "";
 
   const [code, setCode] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<"error" | "success" | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleVerify(e: React.FormEvent) {
@@ -32,79 +32,65 @@ function VerifyForm() {
 
       setStatus("success");
       setTimeout(() => router.push("/auth/login"), 1200);
-    } catch (err: any) {
-      setStatus(err.message);
+    } catch {
+      setStatus("error");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#0b0c0f] px-4">
+    <div className="min-h-screen w-full flex items-center justify-center bg-[var(--background)] px-4">
 
       <div className="w-full max-w-sm flex flex-col items-center text-center">
 
-        {/* TITLE */}
-        <h1 className="text-white text-xl font-semibold tracking-wide mb-2 font-mono">
-          VERIFY EMAIL
+        <h1 className="text-[var(--foreground)] text-2xl font-semibold mb-2">
+          Verify your email
         </h1>
 
-        {/* SUBTITLE */}
-        <p className="text-[11px] text-gray-400 tracking-wider font-mono mb-6">
-          ENTER THE CODE SENT TO{" "}
-          <span className="text-gray-300">{email}</span>
+        <p className="text-sm text-[var(--muted-foreground)] mb-6">
+          Enter the 6-digit code we emailed to{" "}
+          <span className="text-[var(--foreground)] font-medium">{email}</span>.
         </p>
 
-        {/* STATUS MESSAGES */}
-        {status && status !== "success" && (
-          <div className="text-red-400 text-xs mb-4 bg-red-500/10 px-3 py-2 rounded border border-red-500/20 font-mono">
-            {status}
+        {status === "error" && (
+          <div className="banner-base banner-error w-full mb-4 text-left">
+            That code didn&apos;t match. Check the code in your email and try
+            again.
           </div>
         )}
 
         {status === "success" && (
-          <div className="text-green-400 text-xs mb-4 bg-green-500/10 px-3 py-2 rounded border border-green-500/20 font-mono">
-            VERIFIED — REDIRECTING...
+          <div className="banner-base banner-success w-full mb-4 text-left">
+            Email verified. Taking you to sign in...
           </div>
         )}
 
-        {/* CARD */}
-        <div
-          className="
-            w-full bg-[#111215] border border-[#1e1f22]
-            rounded-xl p-6 shadow-lg
-          "
-        >
+        <div className="w-full bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 shadow-lg">
           <form onSubmit={handleVerify} className="space-y-6">
 
-            <CodeInput
-              value={code}
-              onChange={setCode}
-              length={6}
-            />
+            <CodeInput value={code} onChange={setCode} length={6} />
 
-            {/* BUTTON */}
             <Button
-              className="
-                w-full py-2.5 rounded-lg
-                bg-white text-black font-mono font-semibold tracking-wider
-                hover:bg-gray-200 transition
-              "
+              type="submit"
+              variant="primary"
+              className="w-full"
+              loading={loading}
               disabled={loading || code.length < 6}
             >
-              {loading ? "VERIFYING..." : "VERIFY"}
+              {loading ? "Verifying..." : "Verify email"}
             </Button>
           </form>
         </div>
 
-        {/* LOGIN LINK */}
-        <p className="text-xs text-gray-500 mt-4 font-mono tracking-wide">
-          ENTERED A WRONG EMAIL?{" "}
+        <p className="text-sm text-[var(--muted-foreground)] mt-4">
+          Used the wrong email?{" "}
           <button
-            className="text-white hover:underline"
+            type="button"
+            className="text-[var(--primary)] font-medium hover:underline"
             onClick={() => router.push("/auth/register")}
           >
-            GO BACK
+            Go back
           </button>
         </p>
 
@@ -117,7 +103,7 @@ export default function VerifyPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen w-full flex items-center justify-center bg-[#0b0c0f] px-4" />
+        <div className="min-h-screen w-full flex items-center justify-center bg-[var(--background)] px-4" />
       }
     >
       <VerifyForm />

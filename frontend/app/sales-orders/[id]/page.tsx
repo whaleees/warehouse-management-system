@@ -6,24 +6,23 @@ import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import Badge from "@/components/ui/badge";
+import StatusBadge from "@/components/ui/status-badge";
 import { api } from "@/lib/api";
-import { formatDate } from "@/lib/format";
-import { salesOrderStatusColor } from "@/lib/status";
+import { formatDate, formatIDR } from "@/lib/format";
+import { useRole } from "@/lib/roles";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import LoadingState from "@/components/ui/loading-state";
-import EmptyState from "@/components/ui/empty-state";
+import ErrorState from "@/components/ui/error-state";
 
-import {
-  ArrowLeft,
-  Package,
-  Truck,
-  CheckCircle2,
-  User2,
-} from "lucide-react";
+import { ArrowLeft, Package, Truck, CheckCircle2, User2 } from "lucide-react";
 
 export default function SalesOrderDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { can } = useRole();
 
   const [so, setSo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -45,17 +44,24 @@ export default function SalesOrderDetailPage() {
   }, [id]);
 
   async function approveSO() {
-    if (!confirm("Approve this Sales Order?")) return;
-    setActing(true);
+    const ok = await confirm({
+      title: "Approve this sales order?",
+      description:
+        "Once approved, the order is locked for shipping and the items can't be edited.",
+      confirmLabel: "Approve order",
+      onConfirm: async () => {
+        try {
+          await api(`/sales-order/${id}/approve`, { method: "POST" });
+        } catch {
+          throw new Error("Couldn't approve the order. Try again.");
+        }
+      },
+    });
 
-    try {
-      await api(`/sales-order/${id}/approve`, { method: "POST" });
-      await loadSO();
-    } catch (err) {
-      alert("Approve failed.");
-    }
-
-    setActing(false);
+    // Only refresh + confirm to the user when approval actually went through.
+    if (!ok) return;
+    await loadSO();
+    toast.success("Sales order approved.");
   }
 
   async function startShipment() {
@@ -69,155 +75,164 @@ export default function SalesOrderDetailPage() {
 
       router.push(`/shipments/${res.id}`);
     } catch (err) {
-      alert("Failed to start shipment.");
+      console.error("Start shipment failed:", err);
+      toast.error("Couldn't start the shipment. Try again.");
+      setActing(false);
     }
-
-    setActing(false);
   }
 
   if (loading)
     return (
       <DashboardShell>
-        <LoadingState className="text-sm text-[var(--text-muted)]" message="Loading..." />
+        <LoadingState message="Loading sales order…" />
       </DashboardShell>
     );
 
   if (!so)
     return (
       <DashboardShell>
-        <EmptyState className="text-red-400" message="Sales Order not found." />
+        <ErrorState message="We couldn't find that sales order." />
       </DashboardShell>
     );
 
   return (
     <DashboardShell>
       <div className="space-y-8">
-
-        {/* HEADER */}
+        {/* Header */}
         <div className="flex items-center gap-3">
           <button
-            className="p-2 hover:bg-[#1a1b1f] rounded-lg transition"
+            className="rounded-lg p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--foreground)]"
             onClick={() => router.push("/sales-orders")}
+            aria-label="Back to sales orders"
           >
             <ArrowLeft size={20} />
           </button>
 
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-mono tracking-wide">
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
               {so.orderNumber}
             </h1>
-            <Badge color={salesOrderStatusColor(so.status)}>{so.status}</Badge>
+            <StatusBadge kind="salesOrder" status={so.status} />
           </div>
         </div>
 
-        {/* SUMMARY */}
-        <Card className="p-5 bg-[#111217] border border-[#1c1d22]">
+        {/* Summary */}
+        <Card>
           <div className="flex flex-col gap-1 text-sm">
-            <span className="text-[var(--text-muted)] flex items-center gap-1">
+            <span className="flex items-center gap-1 text-[var(--muted-foreground)]">
               <User2 size={14} />
               Customer
             </span>
-            <span className="font-medium text-sm">{so.customer?.name ?? "-"}</span>
-            <span className="text-[10px] text-[var(--text-muted)]">
-              Code: {so.customer?.code}
+            <span className="font-medium text-[var(--foreground)]">
+              {so.customer?.name ?? "-"}
             </span>
+            {so.customer?.code && (
+              <span className="text-xs text-[var(--muted-foreground)]">
+                Code: {so.customer.code}
+              </span>
+            )}
 
             <div className="mt-3">
-              <p className="text-[var(--text-muted)] text-xs">Order Date</p>
-              <p className="font-medium text-sm">{formatDate(so.orderDate)}</p>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Order date
+              </p>
+              <p className="font-medium text-[var(--foreground)]">
+                {formatDate(so.orderDate)}
+              </p>
             </div>
           </div>
 
-          {/* ACTION BUTTONS */}
-          <div className="flex gap-3 mt-5">
-            {so.status === "DRAFT" && (
+          {/* Actions */}
+          <div className="mt-5 flex gap-3">
+            {so.status === "DRAFT" && can("manage:business") && (
               <Button
+                variant="primary"
                 onClick={approveSO}
                 disabled={acting}
-                className="
-                  bg-white text-black 
-                  hover:bg-gray-200
-                  font-mono tracking-wide
-                  flex items-center gap-2
-                "
               >
-                <CheckCircle2 size={14} className="text-black" />
-                Approve
+                <CheckCircle2 size={16} />
+                Approve order
               </Button>
             )}
 
             {(so.status === "PENDING" ||
-              so.status === "PARTIALLY_SHIPPED") && (
+              so.status === "PARTIALLY_SHIPPED") &&
+              can("manage:business") && (
               <Button
+                variant="primary"
                 onClick={startShipment}
-                disabled={acting}
-                className="
-                  bg-white text-black 
-                  hover:bg-gray-200
-                  font-mono tracking-wide
-                  flex items-center gap-2
-                "
+                loading={acting}
               >
-                <Truck size={14} className="text-black" />
-                Start Shipment
+                <Truck size={16} />
+                Start shipment
               </Button>
             )}
           </div>
         </Card>
 
-        {/* ITEMS TABLE */}
-        <Card className="p-0 bg-[#111217] border border-[#1c1d22] overflow-hidden">
-          <div className="px-5 py-3 border-b border-[#1c1d22]">
-            <h2 className="text-sm font-semibold flex items-center gap-2">
-              <Package size={16} /> Items
+        {/* Items */}
+        <Card className="p-0 overflow-hidden">
+          <div className="border-b border-[var(--border)] px-5 py-3">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--card-foreground)]">
+              <Package size={18} /> Items
             </h2>
           </div>
 
-          <table className="w-full text-xs">
-            <thead className="bg-[#0e0f12] text-[var(--text-muted)] uppercase">
-              <tr>
-                <th className="px-5 py-3 text-left">Product</th>
-                <th className="px-5 py-3 text-right">Qty</th>
-                <th className="px-5 py-3 text-right">Unit Price</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {so.items.map((it: any) => (
-                <tr
-                  key={it.id}
-                  className="border-t border-[#1c1d22] hover:bg-[#15171e] transition"
-                >
-                  <td className="px-5 py-3">{it.product.name}</td>
-                  <td className="px-5 py-3 text-right font-medium">
-                    {it.quantity}
-                  </td>
-                  <td className="px-5 py-3 text-right">{it.unitPrice}</td>
+          {so.items.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-[var(--muted-foreground)]">
+              This order has no items yet.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--muted)] text-left text-xs font-medium text-[var(--muted-foreground)]">
+                <tr>
+                  <th className="px-5 py-3">Product</th>
+                  <th className="px-5 py-3 text-right">Qty</th>
+                  <th className="px-5 py-3 text-right">Unit price</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody className="divide-y divide-[var(--border)]">
+                {so.items.map((it: any) => (
+                  <tr
+                    key={it.id}
+                    className="transition-colors hover:bg-[var(--bg-hover)]"
+                  >
+                    <td className="px-5 py-3 text-[var(--foreground)]">
+                      {it.product.name}
+                    </td>
+                    <td className="px-5 py-3 text-right font-medium text-[var(--foreground)]">
+                      {it.quantity}
+                    </td>
+                    <td className="px-5 py-3 text-right text-[var(--foreground)]">
+                      {formatIDR(Number(it.unitPrice))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Card>
 
-        {/* SHIPMENTS */}
-        <Card className="p-5 bg-[#111217] border border-[#1c1d22]">
-          <h2 className="text-sm font-semibold mb-3">Shipments</h2>
+        {/* Shipments */}
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-[var(--card-foreground)]">
+            Shipments
+          </h2>
 
           {!so.shipments || so.shipments.length === 0 ? (
-            <p className="text-xs text-[var(--text-muted)]">No shipments.</p>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No shipments yet. Approve the order, then use Start shipment to send stock to the customer.
+            </p>
           ) : (
-            <div className="space-y-2 text-xs">
+            <div className="space-y-2 text-sm">
               {so.shipments.map((sh: any) => (
                 <div
                   key={sh.id}
-                  className="
-                    p-3 bg-[#15171e] border border-[#23252e]
-                    rounded-lg cursor-pointer
-                    hover:bg-[#1a1c24] transition
-                  "
+                  className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--muted)] p-3 text-[var(--foreground)] transition-colors hover:bg-[var(--bg-hover)]"
                   onClick={() => router.push(`/shipments/${sh.id}`)}
                 >
-                  <span className="font-mono">{sh.shipmentNumber}</span>
+                  <span className="font-medium">{sh.shipmentNumber}</span>
                 </div>
               ))}
             </div>

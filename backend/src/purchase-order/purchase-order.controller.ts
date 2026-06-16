@@ -25,19 +25,19 @@ export class PurchaseOrderController {
   constructor(private readonly service: PurchaseOrderService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   create(@Body() dto: CreatePurchaseOrderDto, @Req() req) {
     return this.service.create(dto, req.user.sub);
   }
 
   @Post(':id/item')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   addItem(@Param('id') id: string, @Body() dto: AddPOItemDto) {
     return this.service.addItem(id, dto);
   }
 
   @Patch(':poId/item/:itemId')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   updateItem(
     @Param('poId') poId: string,
     @Param('itemId') itemId: string,
@@ -47,7 +47,7 @@ export class PurchaseOrderController {
   }
 
   @Delete(':poId/item/:itemId')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   deleteItem(@Param('poId') poId: string, @Param('itemId') itemId: string) {
     return this.service.deleteItem(poId, itemId);
   }
@@ -63,7 +63,7 @@ export class PurchaseOrderController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   update(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto) {
     return this.service.update(id, dto);
   }
@@ -71,11 +71,11 @@ export class PurchaseOrderController {
   @Post(':id/approve')
   @Roles(UserRole.MANAGER)
   approve(@Param('id') id: string, @Req() req) {
-    return this.service.approve(id, req.user.id);
+    return this.service.approve(id, req.user.sub);
   }
 
   @Post(':id/cancel')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.MANAGER)
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
   }

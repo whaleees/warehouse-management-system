@@ -39,12 +39,16 @@ export default function CodeInput({
       {Array.from({ length }).map((_, i) => (
         <input
           key={i}
-          ref={(el) => {inputs.current[i] = el!;}}
+          ref={(el) => {
+            inputs.current[i] = el!;
+          }}
+          inputMode="text"
+          autoComplete="one-time-code"
           maxLength={1}
           value={value[i] ?? ""}
           onChange={(e) => handleChange(i, e.target.value)}
           onKeyDown={(e) => handleKeyDown(i, e)}
-          className="w-10 h-12 text-center text-lg font-semibold rounded-md border border-[var(--border-subtle)] bg-[#090a0f] text-[var(--text)] focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]"
+          className="h-14 w-12 rounded-lg border border-[var(--border)] bg-[var(--input)] text-center text-xl font-semibold text-[var(--foreground)] focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
         />
       ))}
     </div>

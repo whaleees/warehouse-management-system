@@ -5,23 +5,28 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
+import { ArrowLeft } from "lucide-react";
 
 export default function CreateSectionPage() {
   const router = useRouter();
+  const toast = useToast();
 
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; code?: string }>({});
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!name.trim() || !code.trim()) {
-      alert("Name and Code are required");
-      return;
-    }
+    const nextErrors: { name?: string; code?: string } = {};
+    if (!name.trim()) nextErrors.name = "Enter a section name.";
+    if (!code.trim()) nextErrors.code = "Enter a section code.";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
 
     try {
       setSaving(true);
@@ -30,92 +35,84 @@ export default function CreateSectionPage() {
         body: JSON.stringify({ name, code }),
       });
 
+      toast.success("Section created.");
       router.push("/sections");
     } catch (err) {
       console.error(err);
-      alert(err instanceof ApiError ? err.message : "Failed to create section");
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't create the section. Check the details and try again."
+      );
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   return (
     <DashboardShell>
-      <div className="space-y-8">
-        
-        {/* HEADER */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push("/sections")}
-              className="p-2 hover:bg-[#1a1b1f] rounded-lg transition"
-            >
-              <ArrowLeft size={20} />
-            </button>
-
-            <h1 className="text-xl font-mono tracking-widest flex items-center gap-2">
-              <MapPin size={18} /> CREATE SECTION
-            </h1>
-          </div>
+      {/* Header */}
+      <div className="mb-6 flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push("/sections")}
+          aria-label="Back to sections"
+        >
+          <ArrowLeft size={18} />
+        </Button>
+        <div>
+          <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+            Add a section
+          </h1>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            Group your warehouse storage into sections like aisles or zones.
+          </p>
         </div>
-
-        {/* FORM CARD */}
-        <Card className="p-6 bg-[#111217] border border-[#1c1d22] rounded-xl max-w-xl">
-
-          <form onSubmit={submit} className="space-y-6">
-
-            {/* Section Name */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-mono tracking-widest text-gray-400">
-                SECTION NAME
-              </label>
-              <input
-                type="text"
-                placeholder="Frozen Storage"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="
-                  bg-[#0d0e10] border border-[#23252e] rounded-lg 
-                  px-3 py-2 text-sm text-white
-                  focus:outline-none focus:border-gray-500
-                "
-              />
-            </div>
-
-            {/* Section Code */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-mono tracking-widest text-gray-400">
-                SECTION CODE
-              </label>
-              <input
-                type="text"
-                placeholder="SEC-001"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                className="
-                  bg-[#0d0e10] border border-[#23252e] rounded-lg 
-                  px-3 py-2 text-sm text-white
-                  focus:outline-none focus:border-gray-500
-                "
-              />
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={saving}
-              className="
-                w-full px-4 py-2 rounded-lg bg-white text-black
-                font-mono text-xs tracking-widest font-semibold
-                hover:bg-gray-200 transition
-              "
-            >
-              {saving ? "SAVING..." : "CREATE SECTION"}
-            </button>
-
-          </form>
-
-        </Card>
       </div>
+
+      {/* Form card */}
+      <Card className="space-y-8 p-8">
+        <form onSubmit={submit} className="space-y-8">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <Input
+              label="Section name"
+              placeholder="Frozen storage"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
+              }}
+              error={errors.name}
+            />
+
+            <Input
+              label="Section code"
+              placeholder="SEC-001"
+              hint="A short code staff use to refer to this section."
+              value={code}
+              onChange={(e) => {
+                // Codes are conventionally uppercase (SEC-001, SUP-APP).
+                setCode(e.target.value.toUpperCase());
+                if (errors.code) setErrors((p) => ({ ...p, code: undefined }));
+              }}
+              error={errors.code}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push("/sections")}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={saving}>
+              Create section
+            </Button>
+          </div>
+        </form>
+      </Card>
     </DashboardShell>
   );
 }

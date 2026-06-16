@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
+import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import { ArrowLeft } from "lucide-react";
 
 type MovementType = "INBOUND" | "OUTBOUND" | "TRANSFER" | "ADJUST";
@@ -48,8 +50,8 @@ export default function InventoryDetailPage() {
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-xs text-gray-500 font-mono tracking-widest">
-          LOADING INVENTORY...
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Loading inventory…
         </p>
       </DashboardShell>
     );
@@ -58,69 +60,78 @@ export default function InventoryDetailPage() {
   if (!inv) {
     return (
       <DashboardShell>
-        <p className="text-xs text-red-400 font-mono tracking-widest">
-          INVENTORY NOT FOUND.
+        <p className="text-sm text-[var(--danger)]">
+          We couldn&apos;t find this inventory item.
         </p>
       </DashboardShell>
     );
   }
 
-  // BADGE MAP (Static)
-  const badgeMap: Record<MovementType, { text: string; color: string }> = {
-    INBOUND: { text: "IN", color: "bg-green-900/40 text-green-300" },
-    OUTBOUND: { text: "OUT", color: "bg-red-900/40 text-red-300" },
-    TRANSFER: { text: "MOVE", color: "bg-blue-900/40 text-blue-300" },
-    ADJUST: { text: "ADJ", color: "bg-yellow-900/40 text-yellow-300" },
+  // Plain-English label + status color for each movement type.
+  const movementMeta: Record<
+    MovementType,
+    { label: string; color: "success" | "danger" | "default" | "warning" }
+  > = {
+    INBOUND: { label: "Stock in", color: "success" },
+    OUTBOUND: { label: "Stock out", color: "danger" },
+    TRANSFER: { label: "Moved", color: "default" },
+    ADJUST: { label: "Adjusted", color: "warning" },
   };
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
+      <div className="space-y-8">
 
         {/* HEADER */}
         <div className="flex items-center gap-3">
           <button
-            className="p-2 hover:bg-[#1a1c20] rounded-lg transition"
+            className="rounded-lg p-2 transition-colors hover:bg-[var(--bg-hover)]"
             onClick={() => router.push("/inventory")}
+            aria-label="Back to inventory"
           >
-            <ArrowLeft size={20} className="text-gray-300" />
+            <ArrowLeft size={20} className="text-[var(--muted-foreground)]" />
           </button>
 
-          <h1 className="text-xl font-mono tracking-widest">
-            {inv.product?.name?.toUpperCase()} — INVENTORY
-          </h1>
+          <div>
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+              {inv.product?.name}
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Inventory details and stock history
+            </p>
+          </div>
         </div>
 
         {/* MAIN GRID */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
           {/* PRODUCT INFO CARD */}
-          <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl">
-            <h2 className="text-sm font-mono tracking-widest text-gray-400 mb-6">
-              PRODUCT DETAILS
+          <Card>
+            <h2 className="mb-5 text-base font-semibold text-[var(--card-foreground)]">
+              Product
             </h2>
 
-            <div className="space-y-4 text-sm">
-              <DetailRow label="NAME" value={inv.product?.name} />
-              <DetailRow label="SKU" value={inv.product?.sku} />
-              <DetailRow label="CATEGORY" value={inv.product?.category} />
-              <DetailRow label="UOM" value={inv.product?.uom} />
+            <div className="space-y-3 text-sm">
+              <DetailRow label="Name" value={inv.product?.name} />
+              <DetailRow label="Item code" value={inv.product?.sku} />
+              <DetailRow label="Category" value={inv.product?.category} />
+              <DetailRow label="Unit" value={inv.product?.uom} />
             </div>
           </Card>
 
           {/* INVENTORY DETAILS CARD */}
-          <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl lg:col-span-2">
-            <h2 className="text-sm font-mono tracking-widest text-gray-400 mb-6">
-              INVENTORY DETAILS
+          <Card className="lg:col-span-2">
+            <h2 className="mb-5 text-base font-semibold text-[var(--card-foreground)]">
+              Stock
             </h2>
 
-            <div className="space-y-4 text-sm">
-              <DetailRow label="BATCH" value={inv.batch?.code || "—"} />
-              <DetailRow label="LOCATION" value={inv.location?.code || "—"} />
-              <DetailRow label="QUANTITY" value={inv.quantity} />
-              <DetailRow label="RESERVED" value={inv.reservedQty} />
+            <div className="space-y-3 text-sm">
+              <DetailRow label="Batch" value={inv.batch?.code || "—"} />
+              <DetailRow label="Location" value={inv.location?.code || "—"} />
+              <DetailRow label="On hand" value={inv.quantity} />
+              <DetailRow label="Reserved" value={inv.reservedQty} />
               <DetailRow
-                label="AVAILABLE"
+                label="Available"
                 value={inv.quantity - inv.reservedQty}
               />
             </div>
@@ -128,38 +139,36 @@ export default function InventoryDetailPage() {
         </div>
 
         {/* MOVEMENT HISTORY */}
-        <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl">
-          <h2 className="text-sm font-mono tracking-widest text-gray-400 mb-6">
-            MOVEMENT HISTORY
+        <Card>
+          <h2 className="mb-5 text-base font-semibold text-[var(--card-foreground)]">
+            Stock history
           </h2>
 
           {movementLoading ? (
-            <p className="text-xs text-gray-500 font-mono tracking-widest">
-              Loading movements...
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Loading stock history…
             </p>
           ) : movements.length === 0 ? (
-            <p className="text-xs text-gray-500 font-mono tracking-widest">
-              No movement history for this item.
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No stock movements yet for this item.
             </p>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {movements.map(
                 (m: { type: MovementType; quantity: number; [key: string]: any }) => {
-                  
-                  const badge =
-                    badgeMap[m.type as MovementType] ??
-                    {
-                      text: m.type || "UNKNOWN",
-                      color: "bg-gray-800 text-gray-300",
-                    };
 
+                  const meta =
+                    movementMeta[m.type as MovementType] ?? {
+                      label: m.type || "Other",
+                      color: "default" as const,
+                    };
 
                   const qtyColor =
                     m.type === "INBOUND"
-                      ? "text-green-400"
+                      ? "text-[var(--success-text)]"
                       : m.type === "OUTBOUND"
-                      ? "text-red-400"
-                      : "text-blue-400";
+                      ? "text-[var(--danger-text)]"
+                      : "text-[var(--foreground)]";
 
                   const qtyPrefix =
                     m.type === "INBOUND" ? "+" :
@@ -175,56 +184,52 @@ export default function InventoryDetailPage() {
                   return (
                     <div
                       key={m.id}
-                      className="p-4 bg-[#0f1014] border border-[#1d1e23] rounded-lg"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--muted)] p-4"
                     >
-                      <div className="flex justify-between items-start">
+                      <div className="flex items-start justify-between">
 
                         {/* LEFT SECTION */}
-                        <div className="space-y-1 text-xs">
+                        <div className="space-y-1.5 text-sm">
 
                           {/* BADGE + TITLE */}
                           <div className="flex items-center gap-2">
-                            <span
-                              className={`px-2 py-[2px] rounded-md text-[10px] font-bold ${badge.color}`}
-                            >
-                              {badge.text}
-                            </span>
+                            <Badge color={meta.color}>{meta.label}</Badge>
 
-                            <span className="font-semibold text-gray-200">
-                              {m.type === "INBOUND" && "Inbound (PO Receipt)"}
-                              {m.type === "OUTBOUND" && "Outbound (Sales Shipment)"}
-                              {m.type === "TRANSFER" && "Transfer Between Locations"}
-                              {m.type === "ADJUST" && "Stock Adjustment"}
+                            <span className="font-medium text-[var(--foreground)]">
+                              {m.type === "INBOUND" && "Received from a purchase order"}
+                              {m.type === "OUTBOUND" && "Shipped to a customer"}
+                              {m.type === "TRANSFER" && "Moved between locations"}
+                              {m.type === "ADJUST" && "Stock adjustment"}
                             </span>
                           </div>
 
                           {/* QUANTITY */}
-                          <div className={`font-bold ${qtyColor}`}>
-                            {qtyPrefix}{m.quantity}
+                          <div className={`font-semibold ${qtyColor}`}>
+                            {qtyPrefix}{m.quantity} units
                           </div>
 
                           {/* REFERENCE */}
                           {referenceLabel && (
-                            <div className="text-gray-400">
-                              Ref: {referenceLabel}
+                            <div className="text-[var(--muted-foreground)]">
+                              Reference: {referenceLabel}
                             </div>
                           )}
 
                           {/* TRANSFER ROUTE */}
                           {m.type === "TRANSFER" && (
-                            <div className="text-gray-400">
+                            <div className="text-[var(--muted-foreground)]">
                               {m.fromLocation?.code || "?"} → {m.toLocation?.code || "?"}
                             </div>
                           )}
 
                           {/* TIME */}
-                          <div className="text-gray-500 text-[10px]">
-                            {new Date(m.createdAt).toLocaleString()}
+                          <div className="text-xs text-[var(--muted-foreground)]">
+                            {formatDate(m.createdAt)}
                           </div>
                         </div>
 
                         {/* RIGHT SECTION: USER */}
-                        <div className="text-right text-[10px] text-gray-500">
+                        <div className="text-right text-xs text-[var(--muted-foreground)]">
                           {m.user?.name || "System"}
                         </div>
 
@@ -245,11 +250,11 @@ export default function InventoryDetailPage() {
 /* DETAIL ROW COMPONENT */
 function DetailRow({ label, value }: { label: string; value: any }) {
   return (
-    <div className="flex justify-between items-center border-b border-[#232428] pb-3">
-      <span className="text-[11px] text-gray-500 font-mono tracking-widest">
+    <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+      <span className="text-sm text-[var(--muted-foreground)]">
         {label}
       </span>
-      <span className="font-semibold">{value}</span>
+      <span className="font-medium text-[var(--foreground)]">{value}</span>
     </div>
   );
 }

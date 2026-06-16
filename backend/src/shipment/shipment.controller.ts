@@ -21,13 +21,13 @@ export class ShipmentController {
   constructor(private readonly service: ShipmentService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   create(@Body() dto: CreateShipmentDto, @Req() req) {
-    return this.service.create(dto, req.user.id);
+    return this.service.create(dto, req.user.sub);
   }
 
   @Post(':id/line')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   addLine(@Param('id') id: string, @Body() dto: AddShipmentLineDto) {
     return this.service.addLine(id, dto);
   }
@@ -43,19 +43,19 @@ export class ShipmentController {
   }
 
   @Post(':id/ship')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   ship(@Param('id') id: string, @Req() req) {
-    return this.service.ship(id, req.user.id);
+    return this.service.ship(id, req.user.sub);
   }
 
   @Post(':id/deliver')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   deliver(@Param('id') id: string) {
     return this.service.deliver(id);
   }
 
   @Post(':id/cancel')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
   }

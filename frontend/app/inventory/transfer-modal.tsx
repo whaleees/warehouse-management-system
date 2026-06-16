@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface TransferInventory {
   productId: string;
@@ -26,7 +28,14 @@ interface TransferModalProps {
   onSuccess: () => void;
 }
 
-export default function TransferModal({ inv, onClose, onSuccess }: TransferModalProps) {
+export default function TransferModal({
+  inv,
+  onClose,
+  onSuccess,
+}: TransferModalProps) {
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [qty, setQty] = useState(1);
   const [sections, setSections] = useState<TransferOption[]>([]);
   const [selectedSection, setSelectedSection] = useState("");
@@ -47,56 +56,90 @@ export default function TransferModal({ inv, onClose, onSuccess }: TransferModal
     loadSections();
   }, []);
 
-  async function submit() {
-    if (!selectedLocation) return alert("Select destination location");
-    if (qty <= 0) return alert("Invalid quantity");
+  // Keep quantity within 1..available at all times.
+  const clamp = (n: number) =>
+    Math.max(1, Math.min(Number.isFinite(n) ? n : 1, inv.quantity));
 
-    await api("/movement", {
-      method: "POST",
-      body: JSON.stringify({
-        type: "TRANSFER",
-        productId: inv.productId,
-        batchId: inv.batchId,
-        quantity: qty,
-        fromLocationId: inv.locationId,
-        toLocationId: selectedLocation,
-      }),
+  async function handleTransfer() {
+    if (!selectedLocation) {
+      toast.error("Choose a destination location first.");
+      return;
+    }
+    const amount = clamp(qty);
+    const destCode =
+      locations.find((l) => l.id === selectedLocation)?.code ??
+      "the selected location";
+    const unit = amount === 1 ? "unit" : "units";
+
+    const ok = await confirm({
+      title: `Move ${amount} ${unit} of ${inv.product.name}?`,
+      description: (
+        <>
+          From <strong>{inv.location.code}</strong> to{" "}
+          <strong>{destCode}</strong>. This updates stock immediately and
+          can&apos;t be undone.
+        </>
+      ),
+      confirmLabel: "Move stock",
+      onConfirm: async () => {
+        try {
+          await api("/movement", {
+            method: "POST",
+            body: JSON.stringify({
+              type: "TRANSFER",
+              productId: inv.productId,
+              batchId: inv.batchId,
+              quantity: amount,
+              fromLocationId: inv.locationId,
+              toLocationId: selectedLocation,
+            }),
+          });
+        } catch {
+          throw new Error(
+            "Couldn't move the stock. Check the amount and try again.",
+          );
+        }
+      },
     });
 
-    onSuccess();
+    if (ok) {
+      toast.success(`Moved ${amount} ${unit} to ${destCode}.`);
+      onSuccess();
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-      <Card
-        className="
-          w-[460px] p-8 rounded-xl
-          bg-[#0e0f12] border border-[#1c1d22]
-          shadow-xl space-y-6
-        "
-      >
-        {/* HEADER */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <Card className="w-full max-w-md space-y-6">
         <div>
-          <h1 className="text-lg font-mono tracking-widest text-white mb-1">
-            TRANSFER INVENTORY
+          <h1 className="text-lg font-semibold text-[var(--card-foreground)]">
+            Transfer inventory
           </h1>
-          <p className="text-xs font-mono text-gray-500 tracking-widest">
-            MOVE STOCK BETWEEN LOCATIONS
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            Move stock from one location to another.
           </p>
         </div>
 
-        {/* DETAILS BOX */}
-        <div className="bg-[#111217] border border-[#1c1d22] rounded-lg p-4 text-sm font-mono space-y-1">
-          <p>PRODUCT: <span className="text-gray-300">{inv.product.name}</span></p>
-          <p>BATCH: <span className="text-gray-300">{inv.batch.code}</span></p>
-          <p>FROM LOCATION: <span className="text-gray-300">{inv.location.code}</span></p>
-          <p className="text-gray-500 text-xs mt-1">
-            AVAILABLE: {inv.quantity}
+        {/* Source details */}
+        <div className="space-y-1 rounded-lg border border-[var(--border)] bg-[var(--muted)] p-4 text-sm">
+          <p className="text-[var(--foreground)]">
+            <span className="text-[var(--muted-foreground)]">Product: </span>
+            {inv.product.name}
+          </p>
+          <p className="text-[var(--foreground)]">
+            <span className="text-[var(--muted-foreground)]">Batch: </span>
+            {inv.batch.code}
+          </p>
+          <p className="text-[var(--foreground)]">
+            <span className="text-[var(--muted-foreground)]">From: </span>
+            {inv.location.code}
+          </p>
+          <p className="pt-1 text-[var(--muted-foreground)]">
+            Available: <strong>{inv.quantity}</strong> units
           </p>
         </div>
 
-        {/* SECTION SELECT */}
-        <Field label="TO SECTION">
+        <Field label="To section">
           <select
             value={selectedSection}
             onChange={async (e) => {
@@ -105,9 +148,9 @@ export default function TransferModal({ inv, onClose, onSuccess }: TransferModal
               setLocations([]);
               if (e.target.value) await loadLocations(e.target.value);
             }}
-            className="input-style text-xs"
+            className="input-style"
           >
-            <option value="">Select Section</option>
+            <option value="">Select a section</option>
             {sections.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.code}
@@ -116,17 +159,14 @@ export default function TransferModal({ inv, onClose, onSuccess }: TransferModal
           </select>
         </Field>
 
-        {/* LOCATION SELECT */}
-        <Field label="TO LOCATION">
+        <Field label="To location">
           <select
             value={selectedLocation}
             onChange={(e) => setSelectedLocation(e.target.value)}
             disabled={!selectedSection}
-            className={`input-style text-xs ${
-              !selectedSection ? "opacity-50 cursor-not-allowed" : ""
-            }`}
+            className="input-style"
           >
-            <option value="">Select Location</option>
+            <option value="">Select a location</option>
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.code}
@@ -135,51 +175,42 @@ export default function TransferModal({ inv, onClose, onSuccess }: TransferModal
           </select>
         </Field>
 
-        {/* QUANTITY */}
-        <Field label="QUANTITY">
+        <Field label={`Quantity (max ${inv.quantity})`}>
           <input
             type="number"
             min={1}
             max={inv.quantity}
             value={qty}
-            onChange={(e) => setQty(Number(e.target.value))}
-            className="input-style text-xs"
+            onChange={(e) => setQty(clamp(Number(e.target.value)))}
+            className="input-style"
           />
         </Field>
 
-        {/* ACTION BUTTONS */}
-        <div className="flex justify-end gap-3 pt-4">
-          <button
-            onClick={onClose}
-            className="
-              px-4 py-2 text-xs font-mono tracking-widest
-              border border-red-500 text-red-400 rounded-lg
-              hover:bg-red-500 hover:text-black transition
-            "
-          >
-            CANCEL
-          </button>
-
-          <button
-            onClick={submit}
-            className="
-              px-4 py-2 text-xs font-mono tracking-widest
-              bg-white text-black rounded-lg
-              hover:bg-gray-200 transition
-            "
-          >
-            CONFIRM TRANSFER
-          </button>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleTransfer}>
+            Move stock
+          </Button>
         </div>
       </Card>
     </div>
   );
 }
 
-function Field({ label, children }: any) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-1 font-mono">
-      <span className="text-[11px] tracking-widest text-gray-400">{label}</span>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-[var(--foreground)]">
+        {label}
+      </span>
       {children}
     </div>
   );

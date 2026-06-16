@@ -9,16 +9,17 @@ export default function Badge({
   color?: BadgeColor;
   className?: string;
 }) {
-  const base = "px-2 py-[2px] rounded-full text-[11px] font-medium border";
+  const base =
+    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border";
 
   const styles =
     color === "success"
-      ? "border-emerald-500/40 text-emerald-300 bg-emerald-500/10"
+      ? "border-[var(--success-border)] text-[var(--success-text)] bg-[var(--success-bg)]"
       : color === "warning"
-        ? "border-amber-500/40 text-amber-300 bg-amber-500/10"
+        ? "border-[var(--warning-border)] text-[var(--warning-text)] bg-[var(--warning-bg)]"
         : color === "danger"
-          ? "border-red-500/40 text-red-300 bg-red-500/10"
-          : "border-[var(--border)] text-[var(--text-muted)] bg-[#0e1014]";
+          ? "border-[var(--danger-border)] text-[var(--danger-text)] bg-[var(--danger-bg)]"
+          : "border-[var(--border)] text-[var(--muted-foreground)] bg-[var(--muted)]";
 
   return <span className={`${base} ${styles} ${className}`}>{children}</span>;
 }

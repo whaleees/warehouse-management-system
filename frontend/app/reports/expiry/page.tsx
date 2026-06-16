@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
+import Card from "@/components/ui/card";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { api } from "@/lib/api";
+import { formatDateOnly } from "@/lib/format";
 import {
   AreaChart,
   Area,
@@ -21,9 +25,9 @@ interface ExpiryRow {
 }
 
 interface ExpiryChartPoint {
-  key: string;      
-  label: string;    
-  date: Date;       
+  key: string;
+  label: string;
+  date: Date;
   count: number;
 }
 
@@ -40,7 +44,7 @@ export default function ExpiryReportPage() {
         const data: ExpiryRow[] = res.data || [];
         setRows(data);
 
-        // --- GROUP BY MONTH–YEAR ---
+        // Group by month and year
         const grouped: Record<string, ExpiryChartPoint> = {};
 
         data.forEach((row) => {
@@ -80,50 +84,64 @@ export default function ExpiryReportPage() {
 
   return (
     <DashboardShell>
-      <h1 className="text-lg font-mono tracking-widest text-white/90 mb-6">
-        EXPIRY REPORT
-      </h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+          Expiring soon
+        </h1>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Batches nearing their expiry date so you can act on freshness.
+        </p>
+      </div>
 
-      {/* CHART */}
-      <div className="bg-[#111215] border border-[#1e1f22] rounded-xl p-6 shadow-lg mb-8">
-        <p className="font-mono text-xs text-gray-400 tracking-widest mb-4">
-          EXPIRY TREND (MONTH–YEAR)
+      {/* Chart */}
+      <Card className="mb-8">
+        <p className="mb-4 text-sm font-semibold text-[var(--card-foreground)]">
+          Batches expiring by month
         </p>
 
-        <div className="w-full h-[280px]">
+        <div className="h-[280px] w-full">
           {chartData.length === 0 ? (
-            <p className="text-sm text-gray-500 font-mono">
-              {loading ? "Loading chart..." : "No expiry data available."}
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {loading ? "Loading chart…" : "Nothing is expiring soon."}
             </p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="expiryColor" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="10%" stopColor="#9b6bff" stopOpacity={0.8} />
-                    <stop offset="90%" stopColor="#9b6bff" stopOpacity={0} />
+                    <stop
+                      offset="10%"
+                      stopColor="var(--warning)"
+                      stopOpacity={0.8}
+                    />
+                    <stop
+                      offset="90%"
+                      stopColor="var(--warning)"
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 </defs>
 
-                {/* use the month-year label */}
-                <XAxis dataKey="label" stroke="#777" />
-                <YAxis stroke="#555" />
+                <XAxis dataKey="label" stroke="var(--muted-foreground)" />
+                <YAxis stroke="var(--muted-foreground)" />
 
                 <Tooltip
+                  cursor={{ fill: "var(--bg-hover)" }}
                   contentStyle={{
-                    background: "#111215",
-                    border: "1px solid #1e1f22",
-                    borderRadius: "6px",
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
                     fontSize: "12px",
+                    color: "var(--card-foreground)",
                   }}
-                  formatter={(value: any) => [`${value}`, "count"]}
+                  formatter={(value: any) => [`${value}`, "Batches"]}
                   labelFormatter={(label: any) => `${label}`}
                 />
 
                 <Area
                   type="monotone"
                   dataKey="count"
-                  stroke="#b388ff"
+                  stroke="var(--warning)"
                   fill="url(#expiryColor)"
                   strokeWidth={2}
                 />
@@ -131,34 +149,39 @@ export default function ExpiryReportPage() {
             </ResponsiveContainer>
           )}
         </div>
-      </div>
+      </Card>
 
-      {/* TABLE */}
-      <div className="bg-[#111215] border border-[#1e1f22] rounded-xl p-6 shadow-lg">
+      {/* Table */}
+      <Card>
         {loading ? (
-          <p className="text-sm text-gray-500 font-mono">Loading...</p>
+          <LoadingState message="Loading expiring batches…" />
+        ) : rows.length === 0 ? (
+          <EmptyState message="Nothing is expiring soon — every batch is well within date." />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse rounded-xl overflow-hidden">
-              <thead className="bg-[#1e1f22] text-gray-400 font-mono text-[10px] tracking-widest uppercase">
+            <table className="w-full border-collapse">
+              <thead className="border-b border-[var(--border)] text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <tr>
-                  <th className="px-4 py-3 text-left">Product</th>
-                  <th className="px-4 py-3 text-left">Batch</th>
-                  <th className="px-4 py-3 text-left">Location</th>
-                  <th className="px-4 py-3 text-right">Qty</th>
-                  <th className="px-4 py-3 text-left">Expiry</th>
+                  <th className="px-4 py-3">Product</th>
+                  <th className="px-4 py-3">Batch</th>
+                  <th className="px-4 py-3">Location</th>
+                  <th className="px-4 py-3 text-right">Quantity</th>
+                  <th className="px-4 py-3">Expiry date</th>
                 </tr>
               </thead>
 
-              <tbody className="text-sm text-gray-300 font-mono divide-y divide-[#1e1f22]">
+              <tbody className="divide-y divide-[var(--border)] text-sm text-[var(--foreground)]">
                 {rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-[#15161a] transition-all">
+                  <tr
+                    key={i}
+                    className="transition-colors hover:bg-[var(--bg-hover)]"
+                  >
                     <td className="px-4 py-3">{row.productName}</td>
                     <td className="px-4 py-3">{row.batchNumber}</td>
                     <td className="px-4 py-3">{row.locationCode}</td>
                     <td className="px-4 py-3 text-right">{row.quantity}</td>
                     <td className="px-4 py-3">
-                      {new Date(row.expiryDate).toLocaleDateString()}
+                      {formatDateOnly(row.expiryDate)}
                     </td>
                   </tr>
                 ))}
@@ -166,7 +189,7 @@ export default function ExpiryReportPage() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </DashboardShell>
   );
 }

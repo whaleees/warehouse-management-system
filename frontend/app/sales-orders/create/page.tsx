@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
+import { formatIDR } from "@/lib/format";
+import { useToast } from "@/components/ui/toast";
 import { Plus, Trash2 } from "lucide-react";
 
 interface Customer {
@@ -22,24 +25,35 @@ interface Product {
   uom: string;
 }
 
-// peta kapasitas inventory per product
+// Available stock per product id.
 type InventoryMap = Record<string, number>;
+
+interface LineItem {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+}
 
 export default function CreateSalesOrderPage() {
   const router = useRouter();
+  const toast = useToast();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [inventoryMap, setInventoryMap] = useState<InventoryMap>({});
 
   const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("");
   const [expectedDate, setExpectedDate] = useState("");
 
-  const [items, setItems] = useState<
-    { productId: string; quantity: number; unitPrice: number }[]
-  >([]);
+  const [items, setItems] = useState<LineItem[]>([]);
+  // Per-line product search text, keyed by line index.
+  const [productFilters, setProductFilters] = useState<Record<number, string>>(
+    {},
+  );
 
   const [loading, setLoading] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
 
   async function loadMaster() {
     try {
@@ -87,6 +101,7 @@ export default function CreateSalesOrderPage() {
       setCustomers([]);
       setProducts([]);
       setInventoryMap({});
+      toast.error("Couldn't load customers and products. Refresh and try again.");
     }
   }
 
@@ -94,96 +109,124 @@ export default function CreateSalesOrderPage() {
     loadMaster();
   }, []);
 
-  function addItem() {
-    setItems((prev) => [
-      ...prev,
-      { productId: "", quantity: 0, unitPrice: 0 },
-    ]);
+  // Available stock for a product, or undefined when not tracked.
+  function availableFor(productId: string): number | undefined {
+    return Object.prototype.hasOwnProperty.call(inventoryMap, productId)
+      ? inventoryMap[productId]
+      : undefined;
   }
 
-  function updateItem(idx: number, key: string, value: any) {
+  function addItem() {
+    setItems((prev) => [...prev, { productId: "", quantity: 1, unitPrice: 0 }]);
+  }
+
+  function updateItem(idx: number, key: keyof LineItem, value: string | number) {
     setItems((prev) => {
       const copy = [...prev];
-      copy[idx] = { ...copy[idx], [key]: value };
+      let next = { ...copy[idx], [key]: value } as LineItem;
+
+      // Keep quantity within 1..available so staff can't over-promise stock.
+      if (key === "quantity" || key === "productId") {
+        const available = availableFor(next.productId);
+        const max =
+          available !== undefined && available > 0
+            ? available
+            : Number.POSITIVE_INFINITY;
+        const q = Number(next.quantity) || 0;
+        next.quantity = Math.max(1, Math.min(q, max));
+      }
+
+      copy[idx] = next;
       return copy;
     });
   }
 
   function removeItem(idx: number) {
     setItems((prev) => prev.filter((_, i) => i !== idx));
+    setProductFilters((prev) => {
+      const copy = { ...prev };
+      delete copy[idx];
+      return copy;
+    });
+  }
+
+  const filteredCustomers = useMemo(() => {
+    const q = customerFilter.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
+    );
+  }, [customers, customerFilter]);
+
+  function filterProducts(idx: number) {
+    const q = (productFilters[idx] ?? "").trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q),
+    );
   }
 
   async function saveSO() {
+    setShowErrors(true);
+
     if (!selectedCustomer) {
-      alert("Please select a customer.");
+      toast.error("Choose a customer for this order.");
       return;
     }
     if (!expectedDate) {
-      alert("Expected date is required.");
+      toast.error("Pick the date the customer expects their order.");
       return;
     }
     if (items.length === 0) {
-      alert("Add at least one item.");
+      toast.error("Add at least one product to the order.");
       return;
     }
 
-    // validasi basic per-item
+    // Basic per-item validation.
     for (const [idx, it] of items.entries()) {
       if (!it.productId) {
-        alert(`Please select a product for item #${idx + 1}.`);
+        toast.error(`Choose a product for line ${idx + 1}.`);
         return;
       }
       if (!it.quantity || it.quantity <= 0) {
-        alert(`Quantity for item #${idx + 1} must be greater than 0.`);
+        toast.error(`Quantity for line ${idx + 1} must be at least 1.`);
         return;
       }
     }
 
-    // --- CHECK INVENTORY CAPACITY ---
-
-    // aggregate quantity per product (kalau ada produk yang sama di beberapa baris)
+    // Aggregate requested quantity per product (same product across lines).
     const requestedByProduct: Record<string, number> = {};
     for (const it of items) {
       requestedByProduct[it.productId] =
         (requestedByProduct[it.productId] ?? 0) + it.quantity;
     }
 
-    const insufficientLines: string[] = [];
+    const insufficient: string[] = [];
 
-    for (const [productId, requested] of Object.entries(
-      requestedByProduct
-    )) {
-      const hasInventoryEntry = Object.prototype.hasOwnProperty.call(
-        inventoryMap,
-        productId
-      );
-
-      // kalau tidak ada entry inventory untuk product ini, anggap tidak dibatasi
-      const available = hasInventoryEntry
-        ? inventoryMap[productId]
-        : Number.POSITIVE_INFINITY;
+    for (const [productId, requested] of Object.entries(requestedByProduct)) {
+      const available = availableFor(productId);
+      // No inventory record means the product isn't stock-limited here.
+      if (available === undefined) continue;
 
       if (requested > available) {
         const product = products.find((p) => p.id === productId);
-        const label = product
-          ? `${product.name} (SKU ${product.sku})`
-          : productId;
-
-        insufficientLines.push(
-          `${label} → requested ${requested}, available ${available}`
+        const label = product ? product.name : "this product";
+        insufficient.push(
+          `${label}: you asked for ${requested}, only ${available} in stock`,
         );
       }
     }
 
-    if (insufficientLines.length > 0) {
-      alert(
-        "Cannot create Sales Order.\nRequested quantity exceeds available inventory for:\n\n" +
-          insufficientLines.join("\n")
+    if (insufficient.length > 0) {
+      toast.error(
+        `Not enough stock. ${insufficient.join(
+          "; ",
+        )}. Reduce the quantity or wait for restock.`,
       );
       return;
     }
-
-    // --- IF PASSED, BARU CREATE SO ---
 
     setLoading(true);
 
@@ -205,193 +248,194 @@ export default function CreateSalesOrderPage() {
         });
       }
 
+      toast.success("Sales order created.");
       router.push(`/sales-orders/${soId}`);
     } catch (err) {
       console.error("Create SO failed:", err);
-      alert(err instanceof ApiError ? err.message : "Failed to create SO.");
+      toast.error(
+        err instanceof ApiError && err.message
+          ? err.message
+          : "Couldn't create the sales order. Try again.",
+      );
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   return (
     <DashboardShell>
       <div className="space-y-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Create Sales Order
-        </h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+            Create sales order
+          </h1>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            A sales order (SO) records what a customer wants to buy before it ships.
+          </p>
+        </div>
 
-        <Card className="p-6 bg-[#111217] border border-[#1c1d22] space-y-6">
-          {/* CUSTOMER */}
-          <div>
-            <label className="text-sm text-[var(--text-muted)]">
+        <Card className="space-y-6">
+          {/* Customer */}
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-[var(--foreground)]">
               Customer
             </label>
+            <input
+              type="text"
+              placeholder="Search by name or code…"
+              value={customerFilter}
+              onChange={(e) => setCustomerFilter(e.target.value)}
+              className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+            />
             <select
-              className="w-full bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2 mt-1 text-sm"
+              className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               value={selectedCustomer}
               onChange={(e) => setSelectedCustomer(e.target.value)}
             >
-              <option value="">-- Select Customer --</option>
-              {customers.map((c) => (
+              <option value="">Select a customer</option>
+              {filteredCustomers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.code})
                 </option>
               ))}
             </select>
+            {showErrors && !selectedCustomer && (
+              <p className="text-xs font-medium text-[var(--danger-text)]">
+                Choose a customer.
+              </p>
+            )}
           </div>
 
-          {/* EXPECTED DATE */}
-          <div>
-            <label className="text-sm text-[var(--text-muted)]">
-              Expected Date
-            </label>
-            <input
-              type="date"
-              className="w-full bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2 mt-1 text-sm"
-              value={expectedDate}
-              onChange={(e) => setExpectedDate(e.target.value)}
-            />
-          </div>
+          {/* Expected date */}
+          <Input
+            label="Expected date"
+            type="date"
+            value={expectedDate}
+            onChange={(e) => setExpectedDate(e.target.value)}
+            hint="When the customer expects their order."
+            error={
+              showErrors && !expectedDate ? "Pick an expected date." : undefined
+            }
+          />
 
-          {/* ITEMS */}
-          <div className="border-t border-[#1c1d22] pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold">Items</h2>
+          {/* Items */}
+          <div className="border-t border-[var(--border)] pt-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[var(--card-foreground)]">
+                Items
+              </h2>
 
-              {/* WHITE ADD BUTTON */}
-              <button
-                onClick={addItem}
-                className="
-                  bg-white text-black font-mono tracking-wide
-                  px-3 py-1.5 rounded-md text-xs flex items-center gap-2
-                  hover:bg-gray-200 transition
-                "
-              >
-                <Plus size={14} className="text-black" /> Add Item
-              </button>
+              <Button variant="outline" size="sm" onClick={addItem}>
+                <Plus size={16} /> Add item
+              </Button>
             </div>
 
             {items.length === 0 && (
-              <p className="text-xs text-[var(--text-muted)]">
-                No items. Click Add Item.
+              <p className="text-sm text-[var(--muted-foreground)]">
+                No items yet. Add products with the Add item button above.
               </p>
             )}
 
             <div className="space-y-4">
               {items.map((it, idx) => {
-                const available =
-                  it.productId &&
-                  Object.prototype.hasOwnProperty.call(
-                    inventoryMap,
-                    it.productId
-                  )
-                    ? inventoryMap[it.productId]
-                    : undefined;
+                const available = availableFor(it.productId);
 
                 return (
-                  <Card
+                  <div
                     key={idx}
-                    className="p-4 bg-[#15171e] border border-[#23252e]"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--muted)] p-4"
                   >
-                    {/* PRODUCT SELECT */}
-                    <div className="mb-3">
-                      <label className="text-xs text-[var(--text-muted)]">
+                    {/* Product */}
+                    <div className="mb-3 space-y-1.5">
+                      <label className="block text-sm font-medium text-[var(--foreground)]">
                         Product
                       </label>
+                      <input
+                        type="text"
+                        placeholder="Search by name or SKU…"
+                        value={productFilters[idx] ?? ""}
+                        onChange={(e) =>
+                          setProductFilters((prev) => ({
+                            ...prev,
+                            [idx]: e.target.value,
+                          }))
+                        }
+                        className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                      />
                       <select
-                        className="w-full bg-[#111217] border border-[#23252e] rounded-lg px-3 py-2 mt-1 text-xs"
+                        className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                         value={it.productId}
                         onChange={(e) =>
                           updateItem(idx, "productId", e.target.value)
                         }
                       >
-                        <option value="">-- Select Product --</option>
-                        {products.map((p) => (
+                        <option value="">Select a product</option>
+                        {filterProducts(idx).map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name} (SKU {p.sku})
                           </option>
                         ))}
                       </select>
+                      {showErrors && !it.productId && (
+                        <p className="text-xs font-medium text-[var(--danger-text)]">
+                          Choose a product.
+                        </p>
+                      )}
                     </div>
 
-                    {/* QUANTITY */}
+                    {/* Quantity */}
                     <div className="mb-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs text-[var(--text-muted)]">
-                          Quantity
-                        </label>
-                        {available !== undefined && (
-                          <span className="text-[10px] text-[var(--text-muted)]">
-                            Available: {available}
-                          </span>
-                        )}
-                      </div>
-                      <input
+                      <Input
+                        label="Quantity"
                         type="number"
                         min={1}
-                        className="w-full bg-[#111217] border border-[#23252e] rounded-lg px-3 py-2 mt-1 text-xs"
+                        max={available}
                         value={it.quantity}
                         onChange={(e) =>
-                          updateItem(
-                            idx,
-                            "quantity",
-                            Number(e.target.value)
-                          )
+                          updateItem(idx, "quantity", Number(e.target.value))
+                        }
+                        hint={
+                          available !== undefined
+                            ? `In stock: ${available}`
+                            : undefined
                         }
                       />
                     </div>
 
-                    {/* PRICE */}
-                    <div className="mb-3">
-                      <label className="text-xs text-[var(--text-muted)]">
-                        Unit Price
-                      </label>
-                      <input
+                    {/* Unit price */}
+                    <div className="mb-4">
+                      <Input
+                        label="Unit price"
                         type="number"
                         min={0}
-                        className="w-full bg-[#111217] border border-[#23252e] rounded-lg px-3 py-2 mt-1 text-xs"
                         value={it.unitPrice}
                         onChange={(e) =>
-                          updateItem(
-                            idx,
-                            "unitPrice",
-                            Number(e.target.value)
-                          )
+                          updateItem(idx, "unitPrice", Number(e.target.value))
                         }
+                        hint={`Shown to the customer as ${formatIDR(
+                          it.unitPrice,
+                        )}`}
                       />
                     </div>
 
-                    {/* REMOVE */}
-                    <button
+                    {/* Remove */}
+                    <Button
+                      variant="danger"
+                      size="sm"
                       onClick={() => removeItem(idx)}
-                      className="
-                        bg-red-600 hover:bg-red-700 text-white
-                        px-3 py-1.5 rounded-md text-xs
-                        flex items-center gap-1
-                      "
                     >
-                      <Trash2 size={12} /> Remove
-                    </button>
-                  </Card>
+                      <Trash2 size={16} /> Remove
+                    </Button>
+                  </div>
                 );
               })}
             </div>
           </div>
 
-          {/* SUBMIT BUTTON — WHITE */}
-          <div className="flex justify-end pt-4">
-            <button
-              onClick={saveSO}
-              disabled={loading}
-              className="
-                bg-white text-black font-mono tracking-wide
-                px-4 py-2 rounded-md text-sm
-                hover:bg-gray-200 transition
-              "
-            >
-              {loading ? "Saving..." : "Create Sales Order"}
-            </button>
+          {/* Submit */}
+          <div className="flex justify-end border-t border-[var(--border)] pt-5">
+            <Button variant="primary" onClick={saveSO} loading={loading}>
+              {loading ? "Saving…" : "Create sales order"}
+            </Button>
           </div>
         </Card>
       </div>

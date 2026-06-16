@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
+import Card from "@/components/ui/card";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { api } from "@/lib/api";
 import {
   BarChart,
@@ -10,7 +13,7 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Cell,
+  Legend,
 } from "recharts";
 
 export default function LowStockReportPage() {
@@ -28,63 +31,96 @@ export default function LowStockReportPage() {
 
   return (
     <DashboardShell>
-      <h1 className="text-lg font-mono tracking-widest text-white/90 mb-6">
-        LOW STOCK REPORT
-      </h1>
-
-      {/* CHART */}
-      <div className="bg-[#111215] border border-[#1e1f22] rounded-xl p-6 shadow-lg mb-8">
-        <p className="font-mono text-xs text-gray-400 tracking-widest mb-4">
-          STOCK VS THRESHOLD
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+          Low stock
+        </h1>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Products that have dropped below their reorder threshold.
         </p>
-
-        <div className="w-full h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows.slice(0, 12)}>
-              <XAxis dataKey="sku" stroke="#666" />
-              <YAxis stroke="#444" />
-              <Tooltip
-                contentStyle={{
-                  background: "#111215",
-                  border: "1px solid #1e1f22",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                }}
-              />
-              <Bar dataKey="totalStock" fill="#4f8cff" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="lowStockThreshold" fill="#ff6b6b" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
       </div>
 
-      {/* TABLE */}
-      <div className="bg-[#111215] border border-[#1e1f22] rounded-xl p-6 shadow-lg">
+      {/* Chart */}
+      <Card className="mb-8">
+        <p className="mb-4 text-sm font-semibold text-[var(--card-foreground)]">
+          Stock on hand vs reorder threshold
+        </p>
+
+        <div className="h-[280px] w-full">
+          {rows.length === 0 ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {loading ? "Loading chart…" : "All stock is above its threshold."}
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={rows.slice(0, 12)}>
+                <XAxis dataKey="sku" stroke="var(--muted-foreground)" />
+                <YAxis stroke="var(--muted-foreground)" />
+                <Tooltip
+                  cursor={{ fill: "var(--bg-hover)" }}
+                  contentStyle={{
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    color: "var(--card-foreground)",
+                  }}
+                />
+                <Legend />
+                <Bar
+                  name="Stock on hand"
+                  dataKey="totalStock"
+                  fill="var(--primary)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  name="Reorder threshold"
+                  dataKey="lowStockThreshold"
+                  fill="var(--danger)"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      {/* Table */}
+      <Card>
         {loading ? (
-          <p className="text-sm text-gray-500 font-mono">Loading...</p>
+          <LoadingState message="Loading low stock…" />
+        ) : rows.length === 0 ? (
+          <EmptyState message="Nothing to show — all stock is above its threshold." />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse rounded-xl overflow-hidden">
-              <thead className="bg-[#1e1f22] text-gray-400 font-mono text-[10px] tracking-widest uppercase">
+            <table className="w-full border-collapse">
+              <thead className="border-b border-[var(--border)] text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <tr>
-                  <th className="px-4 py-3 text-left">Product</th>
-                  <th className="px-4 py-3 text-left">SKU</th>
-                  <th className="px-4 py-3 text-right">Stock</th>
-                  <th className="px-4 py-3 text-right">Threshold</th>
-                  <th className="px-4 py-3 text-right">Diff</th>
+                  <th className="px-4 py-3">Product</th>
+                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3 text-right">Stock on hand</th>
+                  <th className="px-4 py-3 text-right">Reorder threshold</th>
+                  <th className="px-4 py-3 text-right">Difference</th>
                 </tr>
               </thead>
 
-              <tbody className="text-sm text-gray-300 font-mono divide-y divide-[#1e1f22]">
+              <tbody className="divide-y divide-[var(--border)] text-sm text-[var(--foreground)]">
                 {rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-[#15161a] transition-all">
+                  <tr
+                    key={i}
+                    className="transition-colors hover:bg-[var(--bg-hover)]"
+                  >
                     <td className="px-4 py-3">{row.name}</td>
                     <td className="px-4 py-3">{row.sku}</td>
                     <td className="px-4 py-3 text-right">{row.totalStock}</td>
-                    <td className="px-4 py-3 text-right">{row.lowStockThreshold}</td>
+                    <td className="px-4 py-3 text-right">
+                      {row.lowStockThreshold}
+                    </td>
                     <td
-                      className={`px-4 py-3 text-right ${
-                        row.difference < 0 ? "text-red-400" : "text-yellow-300"
+                      className={`px-4 py-3 text-right font-medium ${
+                        row.difference < 0
+                          ? "text-[var(--danger-text)]"
+                          : "text-[var(--warning-text)]"
                       }`}
                     >
                       {row.difference}
@@ -95,7 +131,7 @@ export default function LowStockReportPage() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </DashboardShell>
   );
 }

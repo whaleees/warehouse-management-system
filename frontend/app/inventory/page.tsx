@@ -3,13 +3,17 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
+import Button from "@/components/ui/button";
+import Badge from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { useRole } from "@/lib/roles";
 import { useRouter } from "next/navigation";
 import { Repeat } from "lucide-react";
 import TransferModal from "./transfer-modal";
 
 export default function InventoryPage() {
   const router = useRouter();
+  const { can } = useRole();
 
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,47 +66,49 @@ export default function InventoryPage() {
 
   return (
     <DashboardShell>
-      <div className="space-y-10">
+      <div className="space-y-8">
 
         {/* HEADER */}
         <div>
-          <h1 className="text-xl font-mono tracking-widest text-white mb-1">
-            INVENTORY
+          <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+            Inventory
           </h1>
-          <p className="text-xs font-mono text-gray-500 tracking-widest">
-            REAL-TIME STOCK VISIBILITY
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            See where your stock is and how much is available.
           </p>
         </div>
 
         {/* SEARCH */}
-        <div className="flex gap-3 items-center">
+        <div className="flex items-center gap-3">
           <input
-            placeholder="Search product, SKU, batch, location..."
+            placeholder="Search by product, item code, batch, or location"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="
-              w-full px-3 py-2 rounded-lg
-              bg-[#0d0e10] border border-[#1c1d22]
-              text-sm font-mono tracking-wide
-              outline-none focus:border-white
+              w-full min-h-10 rounded-lg px-3 py-2 text-sm
+              bg-[var(--card)] border border-[var(--border)]
+              text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]
+              outline-none focus:border-[var(--primary)]
             "
           />
         </div>
 
         {/* TABLE */}
-        <Card className="bg-[#0e0f12] border border-[#1c1d22] rounded-xl overflow-hidden p-0">
-          <table className="w-full text-sm font-mono tracking-wide">
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full min-w-[820px] text-sm">
 
-            <thead className="bg-[#111217] text-gray-500 text-[11px] uppercase">
+            <thead className="bg-[var(--muted)] text-[var(--muted-foreground)] text-xs">
               <tr>
-                <th className="px-4 py-3 text-left">Product</th>
-                <th className="px-4 py-3 text-left">SKU</th>
-                <th className="px-4 py-3 text-left">Batch</th>
-                <th className="px-4 py-3 text-left">Location</th>
-                <th className="px-4 py-3 text-right">Qty</th>
-                <th className="px-4 py-3 text-right">Reserved</th>
-                <th className="px-4 py-3 text-right">Available</th>
-                <th className="px-4 py-3 text-right">Action</th>
+                <th className="px-4 py-3 text-left font-semibold">Product</th>
+                <th className="px-4 py-3 text-left font-semibold" title="Stock Keeping Unit — the product's item code">
+                  Item code
+                </th>
+                <th className="px-4 py-3 text-left font-semibold">Batch</th>
+                <th className="px-4 py-3 text-left font-semibold">Location</th>
+                <th className="px-4 py-3 text-right font-semibold">On hand</th>
+                <th className="px-4 py-3 text-right font-semibold">Reserved</th>
+                <th className="px-4 py-3 text-right font-semibold">Available</th>
+                <th className="px-4 py-3 text-right font-semibold">Action</th>
               </tr>
             </thead>
 
@@ -111,8 +117,8 @@ export default function InventoryPage() {
               {/* LOADING */}
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-gray-500 text-xs">
-                    LOADING INVENTORY...
+                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-[var(--muted-foreground)]">
+                    Loading inventory…
                   </td>
                 </tr>
               )}
@@ -120,8 +126,8 @@ export default function InventoryPage() {
               {/* EMPTY */}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-gray-500 text-xs">
-                    NO INVENTORY FOUND.
+                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-[var(--muted-foreground)]">
+                    No inventory found. Try a different search.
                   </td>
                 </tr>
               )}
@@ -135,57 +141,54 @@ export default function InventoryPage() {
                   return (
                     <tr
                       key={inv.id}
-                      className="border-t border-[#1c1d22] hover:bg-[#15161b] transition"
+                      onClick={() => router.push(`/inventory/${inv.id}`)}
+                      className="cursor-pointer border-t border-[var(--border)] transition-colors hover:bg-[var(--bg-hover)]"
                     >
-                      <td
-                        className="px-4 py-3 font-semibold cursor-pointer"
-                        onClick={() => router.push(`/inventory/${inv.id}`)}
-                      >
+                      <td className="px-4 py-3 font-medium text-[var(--foreground)]">
                         {inv.product?.name}
                       </td>
 
-                      <td
-                        className="px-4 py-3 text-gray-500 cursor-pointer"
-                        onClick={() => router.push(`/inventory/${inv.id}`)}
-                      >
+                      <td className="px-4 py-3 text-[var(--muted-foreground)]">
                         {inv.product?.sku}
                       </td>
 
-                      <td className="px-4 py-3">{inv.batch?.code || "—"}</td>
+                      <td className="px-4 py-3 text-[var(--foreground)]">
+                        {inv.batch?.code || "—"}
+                      </td>
 
-                      <td className="px-4 py-3">{inv.location?.code || "—"}</td>
+                      <td className="px-4 py-3 text-[var(--foreground)]">
+                        {inv.location?.code || "—"}
+                      </td>
 
-                      <td className="px-4 py-3 text-right font-bold">
+                      <td className="px-4 py-3 text-right font-semibold text-[var(--foreground)]">
                         {inv.quantity}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-gray-400">
+                      <td className="px-4 py-3 text-right text-[var(--muted-foreground)]">
                         {inv.reservedQty}
                       </td>
 
-                      <td
-                        className={
-                          "px-4 py-3 text-right font-bold " +
-                          (low ? "text-red-400" : "text-green-400")
-                        }
-                      >
-                        {available}
+                      <td className="px-4 py-3 text-right">
+                        <Badge color={low ? "danger" : "success"}>
+                          {available}
+                        </Badge>
                       </td>
 
                       <td className="px-4 py-3">
                         <div className="flex justify-end">
-                          <button
-                            onClick={() => setSelectedInv(inv)}
-                            className="
-                              px-4 py-2 rounded-lg bg-white text-black 
-                              font-mono text-[10px] tracking-widest font-semibold
-                              hover:bg-gray-200 transition
-                              flex items-center gap-2
-                            "
-                          >
-                            <Repeat size={12} className="text-black" />
-                            TRANSFER
-                          </button>
+                          {can("manage:business") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedInv(inv);
+                              }}
+                            >
+                              <Repeat size={16} />
+                              Transfer
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

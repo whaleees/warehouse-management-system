@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/layout/dashboard-shell";
+import Card from "@/components/ui/card";
+import Badge from "@/components/ui/badge";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { api } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import {
   LineChart,
   Line,
@@ -11,6 +16,15 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+
+function MovementBadge({ type }: { type: string }) {
+  const value = String(type || "");
+  if (value === "IN") return <Badge color="success">Stock in</Badge>;
+  if (value === "OUT") return <Badge color="danger">Stock out</Badge>;
+  if (value === "TRANSFER") return <Badge color="default">Transfer</Badge>;
+  if (value === "ADJUSTMENT") return <Badge color="warning">Adjustment</Badge>;
+  return <Badge color="default">{value || "-"}</Badge>;
+}
 
 export default function StockMovementReportPage() {
   const [loading, setLoading] = useState(true);
@@ -43,79 +57,97 @@ export default function StockMovementReportPage() {
 
   return (
     <DashboardShell>
-      <h1 className="text-lg font-mono tracking-widest text-white/90 mb-6">
-        STOCK MOVEMENT REPORT
-      </h1>
-
-      {/* CHART */}
-      <div className="bg-[#111215] border border-[#1e1f22] rounded-xl p-6 shadow-lg mb-8">
-        <p className="font-mono text-xs text-gray-400 tracking-widest mb-4">
-          MOVEMENT TREND
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+          Stock movement
+        </h1>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Trends and activity for stock moving in and out.
         </p>
-
-        <div className="w-full h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <XAxis dataKey="date" stroke="#777" />
-              <YAxis stroke="#555" />
-
-              <Tooltip
-                contentStyle={{
-                  background: "#111215",
-                  border: "1px solid #1e1f22",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                }}
-              />
-
-              <Line
-                type="monotone"
-                dataKey="count"
-                stroke="#4fe0c0"
-                strokeWidth={2}
-                dot={{ fill: "#4fe0c0" }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
       </div>
 
-      {/* TABLE */}
-      <div className="bg-[#111215] border border-[#1e1f22] rounded-xl p-6 shadow-lg">
+      {/* Chart */}
+      <Card className="mb-8">
+        <p className="mb-4 text-sm font-semibold text-[var(--card-foreground)]">
+          Movements per day
+        </p>
+
+        <div className="h-[280px] w-full">
+          {chartData.length === 0 ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {loading ? "Loading chart…" : "No stock movements yet."}
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <XAxis dataKey="date" stroke="var(--muted-foreground)" />
+                <YAxis stroke="var(--muted-foreground)" />
+
+                <Tooltip
+                  cursor={{ stroke: "var(--border)" }}
+                  contentStyle={{
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    color: "var(--card-foreground)",
+                  }}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="count"
+                  stroke="var(--primary)"
+                  strokeWidth={2}
+                  dot={{ fill: "var(--primary)" }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      {/* Table */}
+      <Card>
         {loading ? (
-          <p className="text-sm text-gray-500 font-mono">Loading...</p>
+          <LoadingState message="Loading stock movements…" />
+        ) : rows.length === 0 ? (
+          <EmptyState message="No stock movements yet." />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse rounded-xl overflow-hidden">
-              <thead className="bg-[#1e1f22] text-gray-400 font-mono text-[10px] tracking-widest uppercase">
+            <table className="w-full border-collapse">
+              <thead className="border-b border-[var(--border)] text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <tr>
-                  <th className="px-4 py-3 text-left">Product</th>
-                  <th className="px-4 py-3 text-left">Type</th>
-                  <th className="px-4 py-3 text-left">From</th>
-                  <th className="px-4 py-3 text-left">To</th>
-                  <th className="px-4 py-3 text-right">Qty</th>
-                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3">Product</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">From</th>
+                  <th className="px-4 py-3">To</th>
+                  <th className="px-4 py-3 text-right">Quantity</th>
+                  <th className="px-4 py-3">Date</th>
                 </tr>
               </thead>
 
-              <tbody className="text-sm text-gray-300 font-mono divide-y divide-[#1e1f22]">
+              <tbody className="divide-y divide-[var(--border)] text-sm text-[var(--foreground)]">
                 {rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-[#15161a] transition-all">
+                  <tr
+                    key={i}
+                    className="transition-colors hover:bg-[var(--bg-hover)]"
+                  >
                     <td className="px-4 py-3">{row.product?.name}</td>
-                    <td className="px-4 py-3">{row.type}</td>
+                    <td className="px-4 py-3">
+                      <MovementBadge type={row.type} />
+                    </td>
                     <td className="px-4 py-3">{row.fromLocation?.code || "-"}</td>
                     <td className="px-4 py-3">{row.toLocation?.code || "-"}</td>
                     <td className="px-4 py-3 text-right">{row.quantity}</td>
-                    <td className="px-4 py-3">
-                      {new Date(row.createdAt).toLocaleString()}
-                    </td>
+                    <td className="px-4 py-3">{formatDate(row.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </DashboardShell>
   );
 }

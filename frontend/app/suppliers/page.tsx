@@ -6,11 +6,19 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import Button from "@/components/ui/button";
+import LoadingState from "@/components/ui/loading-state";
+import EmptyState from "@/components/ui/empty-state";
 import { api } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/config";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useRole } from "@/lib/roles";
 
 export default function SuppliersPage() {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { can } = useRole();
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,10 +33,25 @@ export default function SuppliersPage() {
     setLoading(false);
   }
 
-  async function deleteSupplier(id: string) {
-    if (!confirm("Delete this supplier?")) return;
-    await api(`/supplier/${id}`, { method: "DELETE" });
-    loadSuppliers();
+  async function deleteSupplier(id: string, name: string) {
+    await confirm({
+      title: `Delete ${name}?`,
+      description: "This removes the supplier from your list. This can't be undone.",
+      confirmLabel: "Delete supplier",
+      tone: "danger",
+      onConfirm: async () => {
+        try {
+          await api(`/supplier/${id}`, { method: "DELETE" });
+        } catch {
+          throw new Error("Couldn't delete this supplier. Try again.");
+        }
+      },
+    }).then((ok) => {
+      if (ok) {
+        toast.success(`${name} was deleted.`);
+        loadSuppliers();
+      }
+    });
   }
 
   useEffect(() => {
@@ -39,128 +62,114 @@ export default function SuppliersPage() {
     <DashboardShell>
       <div className="space-y-8">
 
-        {/* HEADER */}
+        {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold tracking-wide font-mono">
-            SUPPLIERS
-          </h1>
+          <div>
+            <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+              Suppliers
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              The vendors you buy stock from.
+            </p>
+          </div>
 
-          <button
-            onClick={() => router.push("/suppliers/create")}
-            className="
-              px-4 py-2 rounded-lg bg-white text-black
-              font-mono text-xs tracking-widest font-semibold
-              hover:bg-gray-200 transition
-              flex items-center gap-2
-            "
-          >
-            <Plus size={14} /> ADD SUPPLIER
-          </button>
+          {can("manage:masterData") && (
+            <Button
+              variant="primary"
+              onClick={() => router.push("/suppliers/create")}
+            >
+              <Plus size={16} /> Add supplier
+            </Button>
+          )}
         </div>
 
-        {/* CONTENT */}
+        {/* Content */}
         {loading ? (
-          <p className="text-xs text-gray-500 font-mono tracking-wide">
-            Loading suppliers...
-          </p>
+          <LoadingState message="Loading suppliers…" />
         ) : suppliers.length === 0 ? (
-          <p className="text-xs text-gray-500 font-mono tracking-wide">
-            No suppliers found.
-          </p>
+          <EmptyState message="No suppliers yet. Add your first supplier with the button above." />
         ) : (
-          <div
-            className="
-              grid 
-              grid-cols-1 
-              sm:grid-cols-2 
-              lg:grid-cols-3 
-              xl:grid-cols-4 
-              gap-6
-            "
-          >
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {suppliers.map((s) => (
               <Card
                 key={s.id}
-                className="
-                  p-5 bg-[#111217] border border-[#1c1d22] rounded-xl 
-                  hover:border-gray-500 hover:bg-[#15161b]
-                  transition-all cursor-pointer relative
-                  flex flex-col justify-between shadow-md
-                "
+                className="relative flex cursor-pointer flex-col justify-between transition-colors hover:bg-[var(--bg-hover)]"
               >
-                {/* CLICKABLE CONTENT */}
+                {/* Clickable content */}
                 <div
-                  className="flex flex-col flex-grow"
+                  className="flex flex-grow flex-col"
                   onClick={() => router.push(`/suppliers/${s.id}`)}
                 >
-                  {/* IMAGE */}
+                  {/* Image */}
                   {s.imagePath ? (
                     <img
                       src={`${API_BASE_URL}${s.imagePath}`}
                       alt={s.name}
-                      className="w-full h-36 object-cover rounded-lg mb-4"
+                      className="mb-4 h-36 w-full rounded-lg object-cover"
                     />
                   ) : (
-                    <div
-                      className="
-                        w-full h-36 bg-[#0d0e10] rounded-lg mb-4 
-                        flex items-center justify-center 
-                        text-gray-600 text-xs font-mono tracking-wide
-                      "
-                    >
-                      NO IMAGE
+                    <div className="mb-4 flex h-36 w-full items-center justify-center rounded-lg bg-[var(--muted)] text-sm text-[var(--muted-foreground)]">
+                      No image
                     </div>
                   )}
 
-                  {/* INFO */}
-                  <div>
-                    <p className="font-semibold text-lg mb-1">{s.name}</p>
+                  {/* Info */}
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold text-[var(--foreground)]">
+                      {s.name}
+                    </p>
 
-                    <p className="text-[10px] text-gray-400 font-mono tracking-wider">
-                      CODE: {s.code}
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      Code: {s.code}
                     </p>
 
                     {s.contact && (
-                      <p className="text-[10px] text-gray-400 font-mono tracking-wider">
-                        CONTACT: {s.contact}
+                      <p className="text-sm text-[var(--muted-foreground)]">
+                        Contact: {s.contact}
                       </p>
                     )}
 
                     {s.phone && (
-                      <p className="text-[10px] text-gray-400 font-mono tracking-wider">
-                        PHONE: {s.phone}
+                      <p className="text-sm text-[var(--muted-foreground)]">
+                        Phone: {s.phone}
                       </p>
                     )}
 
                     {s.email && (
-                      <p className="text-[10px] text-gray-400 font-mono tracking-wider">
-                        EMAIL: {s.email}
+                      <p className="text-sm text-[var(--muted-foreground)]">
+                        Email: {s.email}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* ACTIONS */}
-                <div className="flex justify-end gap-4 mt-4">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      router.push(`/suppliers/${s.id}`);
-                    }}
-                    className="text-gray-300 hover:text-white transition"
-                  >
-                    <Pencil size={18} />
-                  </button>
+                {/* Actions */}
+                <div className="mt-4 flex justify-end gap-2">
+                  {can("manage:masterData") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/suppliers/${s.id}/edit`);
+                      }}
+                    >
+                      <Pencil size={16} /> Edit
+                    </Button>
+                  )}
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSupplier(s.id);
-                    }}
-                    className="text-red-400 hover:text-red-300 transition"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  {can("manage:masterData") && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteSupplier(s.id, s.name);
+                      }}
+                    >
+                      <Trash2 size={16} /> Delete
+                    </Button>
+                  )}
                 </div>
               </Card>
             ))}

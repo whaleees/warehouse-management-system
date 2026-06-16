@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Input from "@/components/ui/input";
 import Button from "@/components/ui/button";
 import { API_BASE_URL, TOKEN_KEY } from "@/lib/config";
-import { Mail, Lock } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,100 +31,77 @@ export default function LoginPage() {
       localStorage.setItem(TOKEN_KEY, data.accessToken);
 
       router.push("/");
-    } catch (err: any) {
-      setError(err.message ?? "Failed to sign in");
+    } catch {
+      setError(
+        "We couldn't sign you in. Check your email and password, then try again.",
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#0b0c0f] px-4">
-      
-      {/* LOGIN WRAPPER - CARECHAIN STYLE */}
+    <div className="min-h-screen w-full flex items-center justify-center bg-[var(--background)] px-4">
+
+      {/* Login card */}
       <div className="w-full max-w-sm flex flex-col items-center text-center">
 
-        {/* TITLE */}
-        <h1 className="text-white text-xl font-semibold tracking-wide mb-2 font-mono">
-          WELCOME BACK
+        <h1 className="text-[var(--foreground)] text-2xl font-semibold mb-2">
+          Welcome back
         </h1>
 
-        {/* SUBTITLE */}
-        <p className="text-[11px] text-gray-400 tracking-wider font-mono mb-8">
-          SIGN IN TO CONTINUE
+        <p className="text-sm text-[var(--muted-foreground)] mb-8">
+          Sign in to continue
         </p>
 
-        {/* ERROR */}
         {error && (
-          <div className="text-red-400 text-xs mb-4 bg-red-500/10 px-3 py-2 rounded border border-red-500/20 font-mono">
+          <div className="banner-base banner-error w-full mb-4 text-left">
             {error}
           </div>
         )}
 
-        {/* FORM CARD */}
-        <div
-          className="
-            w-full bg-[#111215] border border-[#1e1f22]
-            rounded-xl p-6 shadow-lg
-          "
-        >
-          <form onSubmit={handleLogin} className="space-y-4 w-full">
+        <div className="w-full bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 shadow-lg">
+          <form onSubmit={handleLogin} className="space-y-4 w-full text-left">
 
-            {/* EMAIL */}
-            <div className="relative">
-              <Mail
-                size={16}
-                className="absolute left-3 top-3 text-gray-500"
-              />
-              <Input
-                type="email"
-                placeholder="Email"
-                className="pl-10 bg-[#0d0e10] border-[#26282d] font-mono"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+            <Input
+              type="email"
+              label="Email"
+              placeholder="you@company.com"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
 
-            {/* PASSWORD */}
-            <div className="relative">
-              <Lock
-                size={16}
-                className="absolute left-3 top-3 text-gray-500"
-              />
-              <Input
-                type="password"
-                placeholder="Password"
-                className="pl-10 bg-[#0d0e10] border-[#26282d] font-mono"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <Input
+              type="password"
+              label="Password"
+              placeholder="Your password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
 
-            {/* BUTTON */}
             <Button
               type="submit"
-              className="
-                w-full py-2.5 rounded-lg
-                bg-white text-black font-mono font-semibold tracking-wider
-                hover:bg-gray-200 transition
-              "
-              disabled={loading}
+              variant="primary"
+              className="w-full"
+              loading={loading}
             >
-              {loading ? "SIGNING IN..." : "SIGN IN"}
+              {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
         </div>
 
-        {/* REGISTER */}
-        <p className="text-xs text-gray-500 mt-4 font-mono tracking-wide">
-          DON'T HAVE AN ACCOUNT?{" "}
+        <p className="text-sm text-[var(--muted-foreground)] mt-4">
+          Don&apos;t have an account?{" "}
           <button
-            className="text-white hover:underline"
+            type="button"
+            className="text-[var(--primary)] font-medium hover:underline"
             onClick={() => router.push("/auth/register")}
           >
-            REGISTER
+            Create one
           </button>
         </p>
 

@@ -7,21 +7,13 @@ export default function DashboardShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-[#0b0c0f] text-white">
+    <div className="flex min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <Sidebar />
 
-      {/* MAIN AREA */}
-      <div className="flex-1 flex flex-col bg-[#0b0c0f]">
+      <div className="flex flex-1 flex-col">
         <Topbar />
 
-        <main
-          className="
-            flex-1 
-            px-8 py-6
-            overflow-y-auto
-            scrollbar-none
-          "
-        >
+        <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8">
           {children}
         </main>
       </div>

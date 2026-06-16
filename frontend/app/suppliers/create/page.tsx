@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
 import { api, upload, ApiError } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 
 export default function CreateSupplierPage() {
   const router = useRouter();
+  const toast = useToast();
 
   const [form, setForm] = useState({
     code: "",
@@ -21,6 +24,9 @@ export default function CreateSupplierPage() {
 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
+  type FieldErrors = Partial<Record<keyof typeof form, string>>;
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [saving, setSaving] = useState(false);
 
   function generateCode(name: string) {
     if (!name.trim()) return "";
@@ -33,20 +39,35 @@ export default function CreateSupplierPage() {
       [field]: value,
       ...(field === "name" ? { code: generateCode(value) } : {}),
     }));
+    setErrors((prev) => ({ ...prev, [field]: undefined }));
+  }
+
+  function validate(): FieldErrors {
+    const next: FieldErrors = {};
+    if (!form.name.trim()) next.name = "Enter a supplier name.";
+    if (!form.contact.trim()) next.contact = "Enter a contact person.";
+    if (!form.phone.trim()) next.phone = "Enter a phone number.";
+    if (!form.address.trim()) next.address = "Enter an address.";
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
+      next.email = "Enter a valid email address.";
+    return next;
   }
 
   async function handleImageUpload(file: File) {
     const formData = new FormData();
     formData.append("image", file);
 
-    const res = await upload("/upload", formData);
-
-    if (!res?.imagePath) {
-      alert("Image upload failed");
-      return;
+    try {
+      const res = await upload("/upload", formData);
+      if (!res?.imagePath) {
+        toast.error("Couldn't upload that image. Try a different file.");
+        return;
+      }
+      setImagePath(res.imagePath);
+    } catch (err) {
+      console.error("Upload error:", err);
+      toast.error("Couldn't upload that image. Try a different file.");
     }
-
-    setImagePath(res.imagePath);
   }
 
   function onImageChange(e: any) {
@@ -60,176 +81,159 @@ export default function CreateSupplierPage() {
   async function handleSubmit(e: any) {
     e.preventDefault();
 
-    if (!form.name || !form.code) {
-      alert("Please complete required fields.");
+    const nextErrors = validate();
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
 
+    setSaving(true);
     try {
       await api("/supplier", {
         method: "POST",
         body: JSON.stringify({
-          ...form,
+          code: form.code,
+          name: form.name.trim(),
+          contact: form.contact.trim(),
+          phone: form.phone.trim(),
+          address: form.address.trim(),
+          email: form.email.trim() || undefined,
           imagePath: imagePath ?? null,
         }),
       });
 
+      toast.success(`${form.name} was added.`);
       router.push("/suppliers");
     } catch (err) {
       console.error("Create supplier failed:", err);
-      alert(err instanceof ApiError ? err.message : "Failed to create supplier");
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't add this supplier. Check the details and try again.",
+      );
+      setSaving(false);
     }
   }
 
   return (
     <DashboardShell>
-      {/* Heading matches products-create style */}
-      <h1 className="text-xl font-semibold tracking-wide font-mono mb-6">
-        ADD SUPPLIER
-      </h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+          Add supplier
+        </h1>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Save a new vendor you buy stock from.
+        </p>
+      </div>
 
-      <Card className="p-8 space-y-8 bg-[#111217] border border-[#1c1d22] rounded-xl shadow-md">
+      <Card className="space-y-8 p-8">
 
-        {/* IMAGE UPLOAD SECTION — identical style to product create */}
-        <div className="w-full h-52 bg-[#0d0e10] rounded-xl flex items-center justify-center relative overflow-hidden">
+        {/* Image upload */}
+        <div className="relative flex h-52 w-full items-center justify-center overflow-hidden rounded-xl bg-[var(--muted)]">
           {imagePreview ? (
             <img
               src={imagePreview}
-              className="w-full h-full object-cover rounded-xl"
+              alt="Supplier preview"
+              className="h-full w-full rounded-xl object-cover"
             />
           ) : (
-            <span className="text-gray-500 text-xs font-mono tracking-wider">
-              NO IMAGE SELECTED
+            <span className="text-sm text-[var(--muted-foreground)]">
+              No image selected
             </span>
           )}
 
-          <label
-            className="
-              absolute bottom-3 right-3
-              bg-white text-black
-              px-3 py-1 rounded-lg
-              text-xs font-mono tracking-wider
-              cursor-pointer hover:bg-gray-200 transition
-            "
-          >
-            UPLOAD IMAGE
-            <input type="file" accept="image/*" onChange={onImageChange} className="hidden" />
+          <label className="absolute bottom-3 right-3 inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-4 text-sm font-medium text-[var(--secondary-foreground)] transition-colors hover:bg-[var(--bg-hover)]">
+            Upload image
+            <input
+              type="file"
+              accept="image/*"
+              onChange={onImageChange}
+              className="hidden"
+            />
           </label>
         </div>
 
-        {/* FORM */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
 
-            {/* Supplier Name */}
-            <div className="flex flex-col gap-2">
-              <label className="text-[11px] font-mono tracking-widest text-gray-300">
-                SUPPLIER NAME
-              </label>
-              <input
-                value={form.name}
-                onChange={(e) => updateField("name", e.target.value)}
-                placeholder="Ocean Fresh Fisheries"
-                className="
-                  px-3 py-2 rounded-lg bg-[#0e0f13] 
-                  border border-[#1c1d22] text-sm
-                  focus:border-gray-400 outline-none
-                "
-              />
-            </div>
+            <Input
+              label="Supplier name"
+              value={form.name}
+              onChange={(e) => updateField("name", e.target.value)}
+              placeholder="Ocean Fresh Fisheries"
+              error={errors.name}
+            />
 
-            {/* Code */}
-            <div className="flex flex-col gap-2">
-              <label className="text-[11px] font-mono tracking-widest text-gray-300">
-                CODE
-              </label>
-              <input
-                value={form.code}
-                readOnly
-                className="
-                  px-3 py-2 rounded-lg bg-[#1a1c20] 
-                  border border-[#2a2c32] text-gray-500 
-                  text-sm cursor-not-allowed
-                "
-              />
-            </div>
+            <Input
+              label="Code"
+              value={form.code}
+              readOnly
+              hint="Generated automatically from the name."
+            />
 
-            {/* Contact */}
-            <div className="flex flex-col gap-2">
-              <label className="text-[11px] font-mono tracking-widest text-gray-300">
-                CONTACT PERSON
-              </label>
-              <input
-                value={form.contact}
-                onChange={(e) => updateField("contact", e.target.value)}
-                placeholder="Mr. Whale"
-                className="
-                  px-3 py-2 rounded-lg bg-[#0e0f13] 
-                  border border-[#1c1d22] text-sm
-                "
-              />
-            </div>
+            <Input
+              label="Contact person"
+              value={form.contact}
+              onChange={(e) => updateField("contact", e.target.value)}
+              placeholder="Mr. Whale"
+              error={errors.contact}
+            />
 
-            {/* Phone */}
-            <div className="flex flex-col gap-2">
-              <label className="text-[11px] font-mono tracking-widest text-gray-300">
-                PHONE
-              </label>
-              <input
-                value={form.phone}
-                onChange={(e) => updateField("phone", e.target.value)}
-                placeholder="+62-812-8888-9999"
-                className="
-                  px-3 py-2 rounded-lg bg-[#0e0f13] 
-                  border border-[#1c1d22] text-sm
-                "
-              />
-            </div>
+            <Input
+              label="Phone"
+              value={form.phone}
+              onChange={(e) => updateField("phone", e.target.value)}
+              placeholder="+62-812-8888-9999"
+              error={errors.phone}
+            />
 
-            {/* Email */}
-            <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-[11px] font-mono tracking-widest text-gray-300">
-                EMAIL
-              </label>
-              <input
+            <div className="md:col-span-2">
+              <Input
+                label="Email"
+                type="email"
                 value={form.email}
                 onChange={(e) => updateField("email", e.target.value)}
                 placeholder="contact@oceanfresh.com"
-                className="
-                  px-3 py-2 rounded-lg bg-[#0e0f13] 
-                  border border-[#1c1d22] text-sm
-                "
+                error={errors.email}
+                hint="Optional."
               />
             </div>
 
-            {/* Address */}
-            <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-[11px] font-mono tracking-widest text-gray-300">
-                ADDRESS
+            <div className="flex flex-col gap-1.5 md:col-span-2">
+              <label className="block text-sm font-medium text-[var(--foreground)]">
+                Address
               </label>
               <textarea
                 value={form.address}
                 onChange={(e) => updateField("address", e.target.value)}
                 placeholder="Jl. Sukarno Hatta No. 45, Surabaya"
-                className="
-                  px-3 py-2 rounded-lg bg-[#0e0f13] 
-                  border border-[#1c1d22] text-sm h-24 resize-none
-                "
+                className={`input-style h-24 resize-none ${
+                  errors.address ? "border-[var(--danger)]" : ""
+                }`}
               />
+              {errors.address && (
+                <p className="text-xs font-medium text-[var(--danger-text)]">
+                  {errors.address}
+                </p>
+              )}
             </div>
 
           </div>
 
-          <Button
-            type="submit"
-            className="
-              w-full py-3 text-lg rounded-xl 
-              bg-white text-black font-mono tracking-wider
-              hover:bg-gray-200 transition
-            "
-          >
-            CREATE SUPPLIER
-          </Button>
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push("/suppliers")}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={saving}>
+              Add supplier
+            </Button>
+          </div>
         </form>
       </Card>
     </DashboardShell>

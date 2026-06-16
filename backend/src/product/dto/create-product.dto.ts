@@ -1,14 +1,24 @@
-import { IsString, IsOptional, IsEnum, IsInt, Min } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsInt,
+  Min,
+} from 'class-validator';
 import { UOM } from '@prisma/client';
 
 export class CreateProductDto {
   @IsString()
+  @IsNotEmpty({ message: 'Product name is required' })
   name: string;
 
   @IsString()
+  @IsNotEmpty({ message: 'Product code (SKU) is required' })
   sku: string;
 
   @IsString()
+  @IsNotEmpty({ message: 'Category is required' })
   category: string;
 
   @IsOptional()

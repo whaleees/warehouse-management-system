@@ -6,7 +6,12 @@ import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import { Building2, Calendar } from "lucide-react";
+import PoItemsEditor, {
+  type DraftItem,
+  type EditorProduct,
+} from "../po-items-editor";
 
 interface Supplier {
   id: string;
@@ -16,16 +21,21 @@ interface Supplier {
 
 export default function CreatePurchaseOrderPage() {
   const router = useRouter();
+  const toast = useToast();
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
 
+  const [products, setProducts] = useState<EditorProduct[]>([]);
+  const [items, setItems] = useState<DraftItem[]>([]);
+
   const [supplierId, setSupplierId] = useState("");
   const [expectedDate, setExpectedDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [supplierError, setSupplierError] = useState("");
 
   // ─────────────────────────────────────────────
-  // LOAD SUPPLIERS
+  // LOAD SUPPLIERS + PRODUCTS
   // ─────────────────────────────────────────────
   async function loadSuppliers() {
     try {
@@ -38,8 +48,19 @@ export default function CreatePurchaseOrderPage() {
     setLoadingSuppliers(false);
   }
 
+  async function loadProducts() {
+    try {
+      const data = await api("/products");
+      setProducts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Load products failed:", err);
+      setProducts([]);
+    }
+  }
+
   useEffect(() => {
     loadSuppliers();
+    loadProducts();
   }, []);
 
   // ─────────────────────────────────────────────
@@ -49,13 +70,28 @@ export default function CreatePurchaseOrderPage() {
     e.preventDefault();
 
     if (!supplierId) {
-      alert("Please select a supplier.");
+      setSupplierError("Choose a supplier to continue.");
       return;
+    }
+    setSupplierError("");
+
+    // Validate any staged line items (blank rows are possible now).
+    for (const [idx, it] of items.entries()) {
+      if (!it.productId) {
+        toast.error(`Choose a product for item ${idx + 1}.`);
+        return;
+      }
+      if (!it.quantity || it.quantity < 1) {
+        toast.error(`Quantity for item ${idx + 1} must be at least 1.`);
+        return;
+      }
     }
 
     setSaving(true);
     try {
-      const body: any = { supplierId };
+      const body: { supplierId: string; expectedDate?: string } = {
+        supplierId,
+      };
       if (expectedDate) {
         body.expectedDate = new Date(expectedDate).toISOString();
       }
@@ -65,12 +101,33 @@ export default function CreatePurchaseOrderPage() {
         body: JSON.stringify(body),
       });
 
+      // Add the staged line items to the new order, in order.
+      for (const it of items) {
+        await api(`/purchase-order/${po.id}/item`, {
+          method: "POST",
+          body: JSON.stringify({
+            productId: it.productId,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+          }),
+        });
+      }
+
+      toast.success(
+        items.length > 0
+          ? "Purchase order created with its items."
+          : "Purchase order created. Add the items you want to order.",
+      );
       router.push(`/purchase-orders/${po.id}`);
     } catch (err) {
       console.error("Create PO failed:", err);
-      alert(err instanceof ApiError ? err.message : "Failed to create purchase order");
+      toast.error(
+        err instanceof ApiError
+          ? "Couldn't create the purchase order. Check the details and try again."
+          : "Couldn't create the purchase order. Try again.",
+      );
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   // ─────────────────────────────────────────────
@@ -78,88 +135,104 @@ export default function CreatePurchaseOrderPage() {
   return (
     <DashboardShell>
       {/* PAGE HEADER */}
-      <h1 className="text-xl font-mono tracking-widest mb-8">
-        NEW PURCHASE ORDER
-      </h1>
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+          New purchase order
+        </h1>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Pick a supplier and add the items you want to order.
+        </p>
+      </div>
 
-      <Card className="p-6 bg-[#111217] border border-[#1c1d22] rounded-xl max-w-xl">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* SUPPLIER + DATE */}
+        <Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* SUPPLIER FIELD */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="supplier"
+                className="flex items-center gap-2 text-sm font-medium text-[var(--foreground)]"
+              >
+                <Building2 size={14} className="text-[var(--muted-foreground)]" />
+                Supplier
+              </label>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-
-          {/* SUPPLIER FIELD */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[11px] font-mono tracking-widest text-gray-400 flex items-center gap-2">
-              <Building2 size={14} className="opacity-70" />
-              SUPPLIER
-            </label>
-
-            <select
-              value={supplierId}
-              onChange={(e) => setSupplierId(e.target.value)}
-              className="
-                px-3 py-2 rounded-lg 
-                bg-[#0f0f12] border border-[#1c1d22]
-                text-sm font-mono 
-                focus:border-white outline-none
-              "
-            >
-              <option value="">
-                {loadingSuppliers ? "Loading suppliers..." : "Select Supplier"}
-              </option>
-
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code} — {s.name}
+              <select
+                id="supplier"
+                value={supplierId}
+                onChange={(e) => {
+                  setSupplierId(e.target.value);
+                  if (e.target.value) setSupplierError("");
+                }}
+                className={`min-h-10 rounded-lg border bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition-colors focus:ring-2 focus:ring-[var(--ring)] ${
+                  supplierError
+                    ? "border-[var(--danger)]"
+                    : "border-[var(--border)] focus:border-[var(--ring)]"
+                }`}
+              >
+                <option value="">
+                  {loadingSuppliers ? "Loading suppliers…" : "Select a supplier"}
                 </option>
-              ))}
-            </select>
+
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} — {s.name}
+                  </option>
+                ))}
+              </select>
+
+              {supplierError && (
+                <p className="text-xs font-medium text-[var(--danger-text)]">
+                  {supplierError}
+                </p>
+              )}
+            </div>
+
+            {/* EXPECTED DATE FIELD */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="expected-date"
+                className="flex items-center gap-2 text-sm font-medium text-[var(--foreground)]"
+              >
+                <Calendar size={14} className="text-[var(--muted-foreground)]" />
+                Expected delivery date
+              </label>
+
+              <input
+                id="expected-date"
+                type="date"
+                value={expectedDate}
+                onChange={(e) => setExpectedDate(e.target.value)}
+                className="min-h-10 rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition-colors focus:border-[var(--ring)] focus:ring-2 focus:ring-[var(--ring)]"
+              />
+            </div>
           </div>
+        </Card>
 
-          {/* EXPECTED DATE FIELD */}
-          <div className="flex flex-col gap-2 max-w-xs">
-            <label className="text-[11px] font-mono tracking-widest text-gray-400 flex items-center gap-2">
-              <Calendar size={14} className="opacity-70" />
-              EXPECTED DELIVERY DATE
-            </label>
+        {/* LINE ITEMS */}
+        <PoItemsEditor
+          products={products}
+          items={items}
+          onChange={setItems}
+        />
 
-            <input
-              type="date"
-              value={expectedDate}
-              onChange={(e) => setExpectedDate(e.target.value)}
-              className="
-                px-3 py-2 rounded-lg 
-                bg-[#0f0f12] border border-[#1c1d22]
-                text-sm font-mono 
-                focus:border-white outline-none
-              "
-            />
-          </div>
-
-          {/* INFO TEXT */}
-          <p className="text-xs text-gray-500 font-mono tracking-widest leading-relaxed">
-            After creating the purchase order, you can add line items and begin
-            the inbound flow from the PO detail page.
+        {/* SUBMIT */}
+        <div className="flex flex-col gap-2">
+          <Button
+            type="submit"
+            variant="primary"
+            loading={saving}
+            className="w-full md:w-auto"
+          >
+            {saving ? "Creating…" : "Create purchase order"}
+          </Button>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            You can still create the order without items and add them later from
+            the order&apos;s detail page.
           </p>
-
-          {/* SUBMIT BUTTON */}
-          <div>
-            <button
-              type="submit"
-              disabled={saving}
-              className="
-                px-4 py-2 rounded-lg bg-white text-black
-                font-mono text-xs tracking-widest font-semibold
-                hover:bg-gray-200 transition
-                w-full md:w-auto
-              "
-            >
-              {saving ? "CREATING..." : "CREATE PURCHASE ORDER"}
-            </button>
-          </div>
-
-        </form>
-
-      </Card>
+        </div>
+      </form>
     </DashboardShell>
   );
 }

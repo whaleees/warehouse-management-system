@@ -5,6 +5,9 @@ import { useRouter, useParams } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
+import LoadingState from "@/components/ui/loading-state";
+import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/config";
 
@@ -12,6 +15,7 @@ export default function EditProductPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,7 +51,7 @@ export default function EditProductPage() {
     loadProduct();
   }, [id]);
 
-  function updateField(field: string, value: any) {
+  function updateField(field: string, value: string | number) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
@@ -60,18 +64,19 @@ export default function EditProductPage() {
         body: JSON.stringify(form),
       });
 
+      toast.success("Changes saved.");
       router.push("/products");
     } catch (err) {
       console.error("Save failed:", err);
+      toast.error("Couldn't save your changes. Please try again.");
+      setSaving(false);
     }
-
-    setSaving(false);
   }
 
   if (loading) {
     return (
       <DashboardShell>
-        <p className="text-gray-500 text-sm font-mono">LOADING PRODUCT...</p>
+        <LoadingState message="Loading product..." />
       </DashboardShell>
     );
   }
@@ -79,18 +84,18 @@ export default function EditProductPage() {
   return (
     <DashboardShell>
       <div className="mb-10">
-        <h1 className="text-xl font-mono tracking-widest text-white mb-1">
-          EDIT PRODUCT
+        <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-1">
+          Edit product
         </h1>
-        <p className="text-xs font-mono text-gray-500 tracking-widest">
-          UPDATE PRODUCT DETAILS
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Update this product's details.
         </p>
       </div>
 
-      <Card className="p-8 bg-[#111217] border border-[#1c1d22] rounded-xl space-y-8">
+      <Card className="p-8 space-y-8">
 
         {/* IMAGE PREVIEW */}
-        <div className="w-full h-64 bg-[#0d0e10] border border-[#1c1d22] rounded-xl flex items-center justify-center overflow-hidden">
+        <div className="w-full h-64 bg-[var(--muted)] border border-[var(--border)] rounded-xl flex items-center justify-center overflow-hidden">
           {form.imagePath ? (
             <img
               src={`${API_BASE_URL}${form.imagePath}`}
@@ -98,101 +103,74 @@ export default function EditProductPage() {
               className="w-full h-full object-cover rounded-lg"
             />
           ) : (
-            <span className="text-gray-500 text-xs font-mono">NO IMAGE</span>
+            <span className="text-[var(--muted-foreground)] text-sm">No image</span>
           )}
         </div>
 
         {/* FORM */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 
-          {/* NAME */}
-          <Field label="NAME">
-            <input
-              value={form.name}
-              onChange={(e) => updateField("name", e.target.value)}
-              className="input-style"
-              placeholder="Product name"
-            />
-          </Field>
+          <Input
+            label="Name"
+            value={form.name}
+            onChange={(e) => updateField("name", e.target.value)}
+            placeholder="Product name"
+          />
 
-          {/* SKU - READONLY */}
-          <Field label="SKU">
-            <input
-              value={form.sku}
-              disabled
-              className="input-style bg-[#1a1c20] text-gray-500 cursor-not-allowed"
-            />
-          </Field>
+          <Input
+            label="Product code (SKU)"
+            value={form.sku}
+            disabled
+            hint="The product code can't be changed."
+          />
 
-          {/* CATEGORY */}
-          <Field label="CATEGORY">
-            <input
-              value={form.category}
-              onChange={(e) => updateField("category", e.target.value)}
-              className="input-style"
-              placeholder="Category"
-            />
-          </Field>
+          <Input
+            label="Category"
+            value={form.category}
+            onChange={(e) => updateField("category", e.target.value)}
+            placeholder="Category"
+          />
 
-          {/* UOM */}
-          <Field label="UOM">
-            <input
-              value={form.uom}
-              onChange={(e) => updateField("uom", e.target.value)}
-              className="input-style"
-              placeholder="UOM"
-            />
-          </Field>
+          <Input
+            label="Unit of measure (UOM)"
+            value={form.uom}
+            onChange={(e) => updateField("uom", e.target.value)}
+            placeholder="e.g. PCS, BOX, ML"
+          />
 
-          {/* LOW STOCK */}
-          <Field label="LOW STOCK THRESHOLD">
-            <input
-              type="number"
-              value={form.lowStockThreshold}
-              onChange={(e) =>
-                updateField("lowStockThreshold", Number(e.target.value))
-              }
-              className="input-style"
-              placeholder="10"
-              min={0}
-            />
-          </Field>
+          <Input
+            label="Low stock alert"
+            type="number"
+            value={form.lowStockThreshold}
+            onChange={(e) =>
+              updateField("lowStockThreshold", Number(e.target.value))
+            }
+            placeholder="10"
+            min={0}
+            hint="Get notified when stock drops to this amount."
+          />
         </div>
 
-        {/* SAVE BUTTON */}
-        <div className="flex justify-end">
-          <button
-            onClick={saveProduct}
+        {/* ACTIONS */}
+        <div className="flex justify-end gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push("/products")}
             disabled={saving}
-            className="
-              px-6 py-2.5 rounded-lg 
-              bg-white text-black font-mono text-xs tracking-widest
-              hover:bg-gray-200 transition w-full md:w-auto
-            "
           >
-            {saving ? "SAVING..." : "SAVE CHANGES"}
-          </button>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={saveProduct}
+            loading={saving}
+          >
+            Save changes
+          </Button>
         </div>
       </Card>
     </DashboardShell>
   );
 }
-
-/* FIELD WRAPPER COMPONENT */
-function Field({ label, children }: any) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="text-gray-400 text-[11px] font-mono tracking-widest">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-/* SHARED INPUT STYLE */
-const inputStyles = `
-  w-full rounded-lg p-2.5 text-sm
-  bg-[#0e0f13] border border-[#1c1d22]
-  focus:border-white outline-none font-mono
-`;

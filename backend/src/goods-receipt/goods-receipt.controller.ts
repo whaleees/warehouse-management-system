@@ -13,20 +13,20 @@ export class GoodsReceiptController {
   constructor(private readonly service: GoodsReceiptService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.STAFF)
   create(@Body() dto: CreateGoodsReceiptDto, @Req() req) {
-    return this.service.create(dto, req.user.id);
+    return this.service.create(dto, req.user.sub);
   }
 
   @Post(':id/line')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.STAFF)
   addLine(@Param('id') grId: string, @Body() dto: AddGRLineDto) {
     return this.service.addLine(grId, dto);
   }
 
   @Post(':id/finalize')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.MANAGER)
   finalize(@Param('id') grId: string, @Req() req) {
-    return this.service.finalize(grId, req.user.id);
+    return this.service.finalize(grId, req.user.sub);
   }
 }

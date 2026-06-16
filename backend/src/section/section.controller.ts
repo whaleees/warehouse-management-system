@@ -52,7 +52,7 @@ export class SectionController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.ADMIN)
   delete(@Param('id') id: string) {
     return this.sectionService.softDelete(id);
   }

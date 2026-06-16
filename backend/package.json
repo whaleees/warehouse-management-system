@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "code": "node scripts/get-code.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -20,7 +21,10 @@
 
     "test:e2e": "dotenv -e .env.test -- npx prisma migrate reset --force && dotenv -e .env.test -- jest --config ./test/jest-e2e.json",
 
-    "seed": "ts-node seed.ts"
+    "seed": "ts-node seed.ts",
+
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset --force --skip-seed"
   },
   "dependencies": {
     "@nestjs-modules/ioredis": "^2.0.2",

@@ -6,12 +6,15 @@ import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/layout/dashboard-shell";
 import Card from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import Badge from "@/components/ui/badge";
-import { api } from "@/lib/api";
-import { formatDate } from "@/lib/format";
-import { grStatusColor } from "@/lib/status";
+import Input from "@/components/ui/input";
+import StatusBadge from "@/components/ui/status-badge";
 import LoadingState from "@/components/ui/loading-state";
 import EmptyState from "@/components/ui/empty-state";
+import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { api } from "@/lib/api";
+import { useRole } from "@/lib/roles";
+import { formatDate } from "@/lib/format";
 import { useInboundDetail } from "./use-inbound-detail";
 
 import {
@@ -31,6 +34,10 @@ export default function InboundDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
+
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { can } = useRole();
 
   const {
     gr,
@@ -61,9 +68,7 @@ export default function InboundDetailPage() {
     }
   }, [gr, selectedItemId]);
 
-  // --------------------------------------------
-  // 🚀 FIXED: Use backend-calculated received/remaining
-  // --------------------------------------------
+  // Use backend-calculated received/remaining.
   const itemStats = useMemo(() => {
     if (!gr) return [];
 
@@ -95,16 +100,25 @@ export default function InboundDetailPage() {
     return { ordered, received, remaining: ordered - received };
   }, [itemStats, gr]);
 
+  // Keep quantity within 1..remaining for the selected product.
+  const maxQty = selectedItemStat ? Math.max(selectedItemStat.remaining, 0) : 0;
+  const clampQty = (n: number) => {
+    const v = Number.isFinite(n) ? Math.floor(n) : 0;
+    if (v < 0) return 0;
+    if (maxQty > 0 && v > maxQty) return maxQty;
+    return v;
+  };
+
   async function addLine() {
     if (!gr) return;
-    if (!selectedItemId) return alert("Please select a product.");
-    if (!batchNumber.trim()) return alert("Batch number required.");
-    if (!locationId.trim()) return alert("Select a location.");
-    if (!qty || qty <= 0) return alert("Qty must be > 0.");
-    if (!expiryDate) return alert("Expiry date required."); 
+    if (!selectedItemId) return toast.error("Choose a product to receive first.");
+    if (!batchNumber.trim()) return toast.error("Enter the batch number on the box.");
+    if (!locationId.trim()) return toast.error("Choose where to put the stock.");
+    if (!qty || qty <= 0) return toast.error("Enter how many you received (at least 1).");
+    if (!expiryDate) return toast.error("Enter the expiry date from the box.");
 
     const item = gr.purchaseOrder.items.find((i) => i.id === selectedItemId);
-    if (!item) return alert("Invalid item.");
+    if (!item) return toast.error("That product is no longer on this order. Pick another.");
 
     setActing(true);
     try {
@@ -124,8 +138,11 @@ export default function InboundDetailPage() {
       setBatchNumber("");
       setExpiryDate("");
       await loadInbound();
+      toast.success(`Added ${qty} ${item.product.name} to this receipt.`);
     } catch {
-      alert("Failed to add line.");
+      toast.error(
+        "Couldn't add that to the receipt. Check the amount fits the space and try again.",
+      );
     }
     setActing(false);
   }
@@ -133,30 +150,43 @@ export default function InboundDetailPage() {
   async function finalize(autoPostStock: boolean) {
     if (!gr) return;
 
-    const msg = autoPostStock
-      ? "Finalize and post stock?"
-      : "Finalize WITHOUT posting stock?";
+    const ok = await confirm({
+      title: autoPostStock
+        ? "Finalize and add these items to stock?"
+        : "Finalize without changing stock?",
+      description: autoPostStock
+        ? "This closes the receipt and adds everything you logged into warehouse stock. This can't be undone."
+        : "This closes the receipt but does NOT add anything to stock. Use this only when stock was already counted elsewhere. This can't be undone.",
+      confirmLabel: autoPostStock ? "Finalize & add to stock" : "Finalize only",
+      tone: "danger",
+      onConfirm: async () => {
+        try {
+          await api(`/inbound/${gr.id}/finalize`, {
+            method: "POST",
+            body: JSON.stringify({ autoPostStock }),
+          });
+        } catch {
+          throw new Error(
+            "Couldn't finalize this receipt. Check the items and try again.",
+          );
+        }
+      },
+    });
 
-    if (!confirm(msg)) return;
-
-    setActing(true);
-    try {
-      await api(`/inbound/${gr.id}/finalize`, {
-        method: "POST",
-        body: JSON.stringify({ autoPostStock }),
-      });
-
+    if (ok) {
       await loadInbound();
-    } catch {
-      alert("Failed to finalize.");
+      toast.success(
+        autoPostStock
+          ? "Receipt finalized and items added to stock."
+          : "Receipt finalized. Stock was not changed.",
+      );
     }
-    setActing(false);
   }
 
   if (loading) {
     return (
       <DashboardShell>
-        <LoadingState className="text-sm text-[var(--text-muted)]" message="Loading inbound..." />
+        <LoadingState message="Loading goods receipt…" />
       </DashboardShell>
     );
   }
@@ -164,7 +194,7 @@ export default function InboundDetailPage() {
   if (!gr) {
     return (
       <DashboardShell>
-        <EmptyState className="text-sm text-red-400" message="Inbound not found." />
+        <EmptyState message="We couldn't find that goods receipt. It may have been removed." />
       </DashboardShell>
     );
   }
@@ -179,22 +209,25 @@ export default function InboundDetailPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
-              className="p-2 hover:bg-[#1a1b1f] rounded-lg transition"
+              className="rounded-lg p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--foreground)]"
               onClick={() => router.push("/inbound")}
+              aria-label="Back to goods receipts"
             >
               <ArrowLeft size={20} />
             </button>
 
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-semibold">{gr.receiptNumber}</h1>
-                <Badge color={grStatusColor(gr.status)}>{gr.status}</Badge>
+                <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+                  {gr.receiptNumber}
+                </h1>
+                <StatusBadge kind="gr" status={gr.status} />
               </div>
 
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Linked PO:{" "}
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                From purchase order{" "}
                 <button
-                  className="underline-offset-2 hover:underline text-white"
+                  className="font-medium text-[var(--primary)] underline-offset-2 hover:underline"
                   onClick={() =>
                     router.push(`/purchase-orders/${gr.purchaseOrder.id}`)
                   }
@@ -206,69 +239,84 @@ export default function InboundDetailPage() {
           </div>
 
           {!isReadOnly && (
-            <div className="flex flex-wrap gap-3 justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => finalize(false)}
-                disabled={acting}
-              >
-                <PackageOpen size={14} /> Finalize (No Stock Post)
-              </Button>
+            <div className="flex flex-wrap justify-end gap-3">
+              {can("manage:business") && (
+                <Button
+                  variant="outline"
+                  onClick={() => finalize(false)}
+                  disabled={acting}
+                >
+                  <PackageOpen size={16} /> Finalize only — don&apos;t change stock
+                </Button>
+              )}
 
-              <Button
-                size="sm"
-                onClick={() => finalize(true)}
-                disabled={acting}
-                className="bg-emerald-600 hover:bg-emerald-700"
-              >
-                <CheckCircle2 size={14} /> Finalize & Post Stock
-              </Button>
+              {can("manage:business") && (
+                <Button
+                  variant="primary"
+                  onClick={() => finalize(true)}
+                  disabled={acting}
+                >
+                  <CheckCircle2 size={16} /> Finalize &amp; add to stock
+                </Button>
+              )}
             </div>
           )}
         </div>
 
         {/* INFO CARD */}
-        <Card className="p-5 bg-[#111217] border border-[#1c1d22]">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 text-sm">
+        <Card className="p-5">
+          <div className="flex flex-col gap-4 text-sm md:flex-row md:items-center md:justify-between">
 
             <div className="space-y-1">
-              <p className="text-[var(--text-muted)]">Supplier</p>
-              <p className="font-medium">{gr.purchaseOrder.supplier?.name}</p>
-              <p className="text-[10px] text-[var(--text-muted)]">
+              <p className="text-[var(--muted-foreground)]">Supplier</p>
+              <p className="font-medium text-[var(--foreground)]">
+                {gr.purchaseOrder.supplier?.name}
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)]">
                 Code: {gr.purchaseOrder.supplier?.code}
               </p>
             </div>
 
             <div className="space-y-1">
-              <p className="text-[var(--text-muted)] flex items-center gap-1">
-                <Clock3 size={14} /> Received At
+              <p className="flex items-center gap-1 text-[var(--muted-foreground)]">
+                <Clock3 size={14} /> Received on
               </p>
-              <p className="font-medium">{formatDate(gr.receivedAt)}</p>
+              <p className="font-medium text-[var(--foreground)]">
+                {formatDate(gr.receivedAt)}
+              </p>
             </div>
 
-            <div className="space-y-1 text-right text-xs text-[var(--text-muted)]">
-              <p>Ordered: {totalSummary.ordered}</p>
-              <p className="text-emerald-400">
-                Received: {totalSummary.received}
+            <div className="space-y-1 text-sm md:text-right">
+              <p className="text-[var(--muted-foreground)]">
+                Ordered: <span className="text-[var(--foreground)]">{totalSummary.ordered}</span>
               </p>
-              <p>Remaining: {totalSummary.remaining}</p>
+              <p className="text-[var(--muted-foreground)]">
+                Received:{" "}
+                <span className="font-medium text-[var(--success-text)]">
+                  {totalSummary.received}
+                </span>
+              </p>
+              <p className="text-[var(--muted-foreground)]">
+                Remaining: <span className="text-[var(--foreground)]">{totalSummary.remaining}</span>
+              </p>
             </div>
           </div>
         </Card>
 
         {/* LAYOUT GRID */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
           {/* LEFT TABLE */}
-          <Card className="p-0 bg-[#111217] border border-[#1c1d22] lg:col-span-2 overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#1c1d22] flex items-center gap-2">
-              <FileText size={16} />
-              <h2 className="text-sm font-semibold">Purchase Order Items</h2>
+          <Card className="overflow-hidden p-0 lg:col-span-2">
+            <div className="flex items-center gap-2 border-b border-[var(--border)] px-5 py-4">
+              <FileText size={16} className="text-[var(--muted-foreground)]" />
+              <h2 className="text-base font-semibold text-[var(--card-foreground)]">
+                Items on this order
+              </h2>
             </div>
 
-            <table className="w-full text-xs">
-              <thead className="bg-[#0e0f12] text-[var(--text-muted)]">
+            <table className="w-full text-sm">
+              <thead className="border-b border-[var(--border)] bg-[var(--muted)] text-xs font-medium text-[var(--muted-foreground)]">
                 <tr>
                   <th className="px-4 py-3 text-left">Product</th>
                   <th className="px-4 py-3 text-right">Ordered</th>
@@ -282,32 +330,37 @@ export default function InboundDetailPage() {
                   <tr
                     key={it.id}
                     onClick={() => setSelectedItemId(it.id)}
-                    className={`border-t border-[#1c1d22] cursor-pointer hover:bg-[#15171e] ${
-                      it.id === selectedItemId ? "bg-[#15171e]" : ""
+                    className={`cursor-pointer border-t border-[var(--border)] transition-colors hover:bg-[var(--bg-hover)] ${
+                      it.id === selectedItemId ? "bg-[var(--bg-hover)]" : ""
                     }`}
                   >
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
-                        <span className="font-medium">{it.product.name}</span>
-                        <span className="text-[10px] text-[var(--text-muted)]">
-                          SKU: {it.product.sku}
+                        <span className="font-medium text-[var(--foreground)]">
+                          {it.product.name}
+                        </span>
+                        <span
+                          className="text-xs text-[var(--muted-foreground)]"
+                          title="Stock keeping unit: the product's unique code."
+                        >
+                          Item code: {it.product.sku}
                         </span>
                       </div>
                     </td>
 
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right text-[var(--foreground)]">
                       {it.quantity} {it.product.uom}
                     </td>
 
-                    <td className="px-4 py-3 text-right text-emerald-400">
+                    <td className="px-4 py-3 text-right font-medium text-[var(--success-text)]">
                       {it.received}
                     </td>
 
                     <td className="px-4 py-3 text-right">
                       {it.remaining <= 0 ? (
-                        <span className="text-emerald-400 font-medium">0</span>
+                        <span className="font-medium text-[var(--success-text)]">0</span>
                       ) : (
-                        it.remaining
+                        <span className="text-[var(--foreground)]">{it.remaining}</span>
                       )}
                     </td>
                   </tr>
@@ -317,100 +370,94 @@ export default function InboundDetailPage() {
           </Card>
 
           {/* RIGHT PANEL */}
-          <Card className="p-5 bg-[#111217] border border-[#1c1d22] flex flex-col gap-4">
+          <Card className="flex flex-col gap-4 p-5">
 
-            <div className="flex items-center gap-2 mb-1">
-              <PackageSearch size={16} />
-              <h2 className="text-sm font-semibold">Scan / Add Line</h2>
+            <div className="mb-1 flex items-center gap-2">
+              <PackageSearch size={16} className="text-[var(--muted-foreground)]" />
+              <h2 className="text-base font-semibold text-[var(--card-foreground)]">
+                Receive items
+              </h2>
             </div>
 
             {/* SELECTED ITEM SUMMARY */}
-            <div className="text-xs bg-[#15171e] border border-[#23252e] rounded-lg p-3 space-y-1">
+            <div className="space-y-1 rounded-lg border border-[var(--border)] bg-[var(--muted)] p-3 text-sm">
               {selectedItemStat ? (
                 <>
-                  <p className="font-medium flex items-center gap-1">
-                    <Barcode size={12} /> {selectedItemStat.product.name}
+                  <p className="flex items-center gap-1 font-medium text-[var(--foreground)]">
+                    <Barcode size={14} /> {selectedItemStat.product.name}
                   </p>
-                  <p className="text-[10px] text-[var(--text-muted)]">
-                    SKU: {selectedItemStat.product.sku}
+                  <p
+                    className="text-xs text-[var(--muted-foreground)]"
+                    title="Stock keeping unit: the product's unique code."
+                  >
+                    Item code: {selectedItemStat.product.sku}
                   </p>
 
-                  <div className="flex justify-between mt-1">
+                  <div className="mt-1 flex justify-between text-[var(--muted-foreground)]">
                     <span>Ordered: {selectedItemStat.quantity}</span>
-                    <span className="text-emerald-400">
+                    <span className="text-[var(--success-text)]">
                       Received: {selectedItemStat.received}
                     </span>
-                    <span>
-                      Remaining: {selectedItemStat.remaining}
-                    </span>
+                    <span>Remaining: {selectedItemStat.remaining}</span>
                   </div>
                 </>
               ) : (
-                <p className="text-[var(--text-muted)]">
-                  Select a product to receive.
+                <p className="text-[var(--muted-foreground)]">
+                  Pick a product from the list to start receiving.
                 </p>
               )}
             </div>
 
             {/* PRODUCT SELECT */}
-            <div className="space-y-1 text-xs">
-              <label className="text-[var(--text-muted)]">Product</label>
+            <div className="flex flex-col gap-1.5 text-sm">
+              <label className="font-medium text-[var(--foreground)]">Product</label>
 
               <select
-                className="w-full bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2 text-xs"
+                className="input-style"
                 value={selectedItemId}
                 onChange={(e) => setSelectedItemId(e.target.value)}
                 disabled={isReadOnly}
               >
                 {gr.purchaseOrder.items.map((it) => (
                   <option key={it.id} value={it.id}>
-                    {it.product.name} (SKU: {it.product.sku})
+                    {it.product.name} (item code {it.product.sku})
                   </option>
                 ))}
               </select>
             </div>
 
             {/* BATCH NUMBER */}
-            <div className="space-y-1 text-xs">
-              <label className="text-[var(--text-muted)]">Batch Number</label>
-
-              <input
-                className="w-full bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2 text-xs"
-                placeholder="e.g. BATCH-001"
-                value={batchNumber}
-                onChange={(e) => setBatchNumber(e.target.value)}
-                disabled={isReadOnly}
-              />
-            </div>
+            <Input
+              label="Batch number"
+              hint="The batch or lot number printed on the box."
+              placeholder="e.g. BATCH-001"
+              value={batchNumber}
+              onChange={(e) => setBatchNumber(e.target.value)}
+              disabled={isReadOnly}
+            />
 
             {/* EXPIRY DATE */}
-            <div className="space-y-1 text-xs">
-              <label className="text-[var(--text-muted)]">Expiry Date</label>
-
-              <input
-                type="date"
-                className="w-full bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2 text-xs"
-                value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
-                disabled={isReadOnly}
-              />
-            </div>
+            <Input
+              label="Expiry date"
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              disabled={isReadOnly}
+            />
 
             {/* SECTION → LOCATION */}
-            <div className="space-y-2 text-xs">
+            <div className="flex flex-col gap-2 text-sm">
 
-              <label className="text-[var(--text-muted)] flex items-center gap-1">
-                <MapPin size={12} /> Receive Into Location
+              <label className="flex items-center gap-1 font-medium text-[var(--foreground)]">
+                <MapPin size={14} /> Where to put it
               </label>
 
               {/* Section */}
-              <div className="space-y-1">
-                <span className="text-[10px] text-[var(--text-muted)]">
-                  Section
-                </span>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-[var(--muted-foreground)]">Section</span>
 
                 <select
-                  className="w-full bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2 text-xs"
+                  className="input-style"
                   value={selectedSectionId}
                   onChange={async (e) => {
                     const sid = e.target.value;
@@ -422,31 +469,35 @@ export default function InboundDetailPage() {
                   }}
                   disabled={isReadOnly}
                 >
-                  <option value="">Select Section</option>
+                  <option value="">Choose a section</option>
                   {sections.map((sec) => (
                     <option key={sec.id} value={sec.id}>
                       {sec.code}
+                      {sec.description ? ` — ${sec.description}` : ""}
                     </option>
                   ))}
                 </select>
               </div>
 
               {/* Location */}
-              <div className="space-y-1">
-                <span className="text-[10px] text-[var(--text-muted)]">
-                  Location
-                </span>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-[var(--muted-foreground)]">Location</span>
 
                 <select
-                  className="w-full bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2 text-xs"
+                  className="input-style"
                   value={locationId}
                   onChange={(e) => setLocationId(e.target.value)}
                   disabled={isReadOnly || !selectedSectionId}
                 >
-                  <option value="">Select Location</option>
+                  <option value="">Choose a location</option>
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
                       {loc.code}
+                      {loc.description
+                        ? ` — ${loc.description}`
+                        : loc.type
+                        ? ` — ${loc.type}`
+                        : ""}
                     </option>
                   ))}
                 </select>
@@ -454,61 +505,65 @@ export default function InboundDetailPage() {
             </div>
 
             {/* QUANTITY */}
-            <div className="space-y-1 text-xs">
-              <label className="text-[var(--text-muted)]">Quantity</label>
-
-              <input
-                type="number"
-                className="w-full bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2 text-xs"
-                min={1}
-                value={qty}
-                onChange={(e) => setQty(Number(e.target.value))}
-                disabled={isReadOnly}
-              />
-            </div>
+            <Input
+              label="Quantity received"
+              type="number"
+              min={1}
+              max={maxQty > 0 ? maxQty : undefined}
+              hint={
+                selectedItemStat
+                  ? `Up to ${maxQty} left to receive.`
+                  : "Pick a product first."
+              }
+              value={qty}
+              onChange={(e) => setQty(clampQty(Number(e.target.value)))}
+              disabled={isReadOnly}
+            />
 
             {/* ADD LINE */}
-            <Button
-              onClick={addLine}
-              disabled={isReadOnly || acting}
-              className="
-                w-full flex items-center justify-center gap-2 mt-2
-                bg-white text-black font-semibold 
-                hover:bg-gray-200 transition
-              "
-            >
-              <Truck size={14} className="text-black" />
-              Add Inbound Line
-            </Button>
+            {can("receive:goods") && (
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={addLine}
+                disabled={isReadOnly || acting}
+                loading={acting}
+              >
+                <Truck size={16} />
+                Add to receipt
+              </Button>
+            )}
 
             {/* LINES */}
-            <div className="pt-3 border-t border-[#23252e] mt-2">
-              <p className="text-xs font-semibold mb-2 flex items-center gap-1">
-                <FileText size={12} /> Lines in this GR
+            <div className="mt-2 border-t border-[var(--border)] pt-3">
+              <p className="mb-2 flex items-center gap-1 text-sm font-semibold text-[var(--foreground)]">
+                <FileText size={14} /> Already received
               </p>
 
               {gr.lines.length === 0 ? (
-                <p className="text-[10px] text-[var(--text-muted)]">
-                  No lines yet.
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  Nothing logged yet. Fill in the form above and choose Add to receipt.
                 </p>
               ) : (
-                <div className="max-h-64 overflow-auto space-y-2 text-[11px]">
+                <div className="max-h-64 space-y-2 overflow-auto text-sm">
                   {gr.lines.map((ln) => (
                     <div
                       key={ln.id}
-                      className="bg-[#15171e] border border-[#23252e] rounded-lg px-3 py-2"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2"
                     >
                       <div className="flex justify-between">
-                        <span className="font-medium">{ln.product.name}</span>
-                        <span>
+                        <span className="font-medium text-[var(--foreground)]">
+                          {ln.product.name}
+                        </span>
+                        <span className="text-[var(--foreground)]">
                           {ln.quantity} {ln.product.uom}
                         </span>
                       </div>
 
-                      <div className="flex justify-between text-[10px] text-[var(--text-muted)] mt-1">
+                      <div className="mt-1 flex justify-between text-xs text-[var(--muted-foreground)]">
                         <span>Batch: {ln.batch.batchNumber}</span>
                         <span>
-                          Loc: {ln.location.code}
+                          Location: {ln.location.code}
                           {ln.location.section
                             ? ` (${ln.location.section.code})`
                             : ""}
@@ -516,8 +571,8 @@ export default function InboundDetailPage() {
                       </div>
 
                       {ln.batch.expiryDate && (
-                        <p className="text-[10px] text-[var(--text-muted)] mt-1">
-                          Exp: {formatDate(ln.batch.expiryDate)}
+                        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                          Expires: {formatDate(ln.batch.expiryDate)}
                         </p>
                       )}
                     </div>
